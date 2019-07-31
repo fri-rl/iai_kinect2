@@ -33,6 +33,11 @@
 
 #include <opencv2/opencv.hpp>
 
+// If OpenCV4
+#if CV_VERSION_MAJOR > 3
+#include <opencv2/imgproc/imgproc_c.h>
+#endif
+
 #include <ros/ros.h>
 #include <ros/spinner.h>
 #include <sensor_msgs/CameraInfo.h>

@@ -34,6 +34,12 @@
 
 #include <opencv2/opencv.hpp>
 
+// If OpenCV4
+#if CV_VERSION_MAJOR > 3
+#include <opencv2/imgcodecs/legacy/constants_c.h>
+#include <opencv2/imgproc/types_c.h>
+#endif
+
 #include <ros/ros.h>
 #include <nodelet/nodelet.h>
 #include <std_msgs/Header.h>

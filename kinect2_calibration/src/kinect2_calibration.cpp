@@ -30,6 +30,11 @@
 
 #include <opencv2/opencv.hpp>
 
+// If OpenCV4
+#if CV_VERSION_MAJOR > 3
+#include <opencv2/imgcodecs/legacy/constants_c.h>
+#endif
+
 #include <ros/ros.h>
 #include <ros/spinner.h>
 #include <sensor_msgs/CameraInfo.h>
@@ -740,10 +745,10 @@ private:
     OUT_INFO("Distortion Coeeficients Ir:" << std::endl << distortionIr << std::endl);
 
     OUT_INFO("calibrating Color and Ir extrinsics...");
-#if CV_MAJOR_VERSION == 2
+#if CV_VERSION_MAJOR == 2
     error = cv::stereoCalibrate(pointsBoard, pointsIr, pointsColor, cameraMatrixIr, distortionIr, cameraMatrixColor, distortionColor, sizeColor,
                                 rotation, translation, essential, fundamental, termCriteria, cv::CALIB_FIX_INTRINSIC);
-#elif CV_MAJOR_VERSION == 3
+#elif CV_VERSION_MAJOR > 2
     error = cv::stereoCalibrate(pointsBoard, pointsIr, pointsColor, cameraMatrixIr, distortionIr, cameraMatrixColor, distortionColor, sizeColor,
                                 rotation, translation, essential, fundamental, cv::CALIB_FIX_INTRINSIC, termCriteria);
 #endif
@@ -1089,9 +1094,9 @@ private:
   {
     cv::Mat rvec, rotation, translation;
     //cv::solvePnP(board, points[index], cameraMatrix, distortion, rvec, translation, false, cv::EPNP);
-#if CV_MAJOR_VERSION == 2
+#if CV_VERSION_MAJOR == 2
     cv::solvePnPRansac(board, points[index], cameraMatrix, distortion, rvec, translation, false, 300, 0.05, board.size(), cv::noArray(), cv::ITERATIVE);
-#elif CV_MAJOR_VERSION == 3
+#elif CV_VERSION_MAJOR > 2
     cv::solvePnPRansac(board, points[index], cameraMatrix, distortion, rvec, translation, false, 300, 0.05, 0.99, cv::noArray(), cv::SOLVEPNP_ITERATIVE);
 #endif
     cv::Rodrigues(rvec, rotation);
