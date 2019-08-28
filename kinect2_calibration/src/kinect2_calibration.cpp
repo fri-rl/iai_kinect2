@@ -21,6 +21,7 @@
 #include <sstream>
 #include <fstream>
 #include <string>
+#include <regex>
 #include <vector>
 #include <mutex>
 #include <thread>
@@ -29,6 +30,7 @@
 #include <sys/stat.h>
 
 #include <opencv2/opencv.hpp>
+#include <opencv2/aruco/charuco.hpp>
 
 // If OpenCV4
 #if CV_VERSION_MAJOR > 3
@@ -59,17 +61,26 @@ enum Mode
   CALIBRATE
 };
 
+enum Board
+{
+  CHESS,
+  CIRCLE,
+  ACIRCLE,
+  CHARUCO
+};
+
 enum Source
 {
   COLOR,
   IR,
-  SYNC
+  SYNC,
+  ANY
 };
 
 class Recorder
 {
 private:
-  const bool circleBoard;
+  const Board board_type;
   int circleFlags;
 
   const cv::Size boardDims;
@@ -84,11 +95,28 @@ private:
   bool foundColor, foundIr;
   cv::Mat color, ir, irGrey, depth;
 
+
   size_t frame;
   std::vector<int> params;
 
   std::vector<cv::Point3f> board;
   std::vector<cv::Point2f> pointsColor, pointsIr;
+
+
+  std::vector< int > aruco_ids_color;
+  std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
+  cv::Mat charuco_corners_color, charuco_ids_color;
+
+  std::vector< int > aruco_ids_ir;
+  std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
+  cv::Mat charuco_corners_ir, charuco_ids_ir;
+
+  cv::Ptr<cv::aruco::Dictionary> aruco_dictionary;
+  cv::Ptr<cv::aruco::CharucoBoard> charuco_board;
+  cv::Ptr<cv::aruco::Board> aruco_board;
+
+
+
 
   typedef message_filters::sync_policies::ExactTime<sensor_msgs::Image, sensor_msgs::Image, sensor_msgs::Image> ColorIrDepthSyncPolicy;
   ros::NodeHandle nh;
@@ -102,15 +130,16 @@ private:
 
 public:
   Recorder(const std::string &path, const std::string &topicColor, const std::string &topicIr, const std::string &topicDepth,
-           const Source mode, const bool circleBoard, const bool symmetric, const cv::Size &boardDims, const float boardSize)
-    : circleBoard(circleBoard), boardDims(boardDims), boardSize(boardSize), mode(mode), path(path), topicColor(topicColor), topicIr(topicIr),
+           const Source mode, const Board board_type, const cv::Size &boardDims, const float boardSize, const int aruco_dict_id)
+    : board_type(board_type), boardDims(boardDims), boardSize(boardSize), mode(mode), path(path), topicColor(topicColor), topicIr(topicIr),
       topicDepth(topicDepth), update(false), foundColor(false), foundIr(false), frame(0), nh("~"), spinner(0), it(nh), minIr(0), maxIr(0x7FFF)
   {
-    if(symmetric)
+
+    if(board_type == CIRCLE)
     {
       circleFlags = cv::CALIB_CB_SYMMETRIC_GRID + cv::CALIB_CB_CLUSTERING;
     }
-    else
+    else if (board_type == ACIRCLE)
     {
       circleFlags = cv::CALIB_CB_ASYMMETRIC_GRID + cv::CALIB_CB_CLUSTERING;
     }
@@ -119,17 +148,7 @@ public:
     params.push_back(9);
 
     board.resize(boardDims.width * boardDims.height);
-    if (symmetric)
-    {
-      for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
-      {
-        for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
-        {
-          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
-        }
-      }
-    }
-    else
+    if (board_type == ACIRCLE)
     {
       for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
       {
@@ -139,11 +158,73 @@ public:
         }
       }
     }
+    else
+    {
+      for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
+      {
+        for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
+        {
+          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
+        }
+      }
+    }
 
     clahe = cv::createCLAHE(1.5, cv::Size(32, 32));
+
+
+    if (board_type == CHARUCO){
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // create charuco board object
+      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      aruco_board = charuco_board.staticCast<cv::aruco::Board>();
+    }
+
+    frame = find_next_frame_id();
+    OUT_INFO("NEXT_FRAME_ID: " << frame);
   }
   ~Recorder()
   {
+  }
+
+  int find_next_frame_id(){
+
+    DIR *dp;
+    struct dirent *dirp;
+
+    if((dp  = opendir(path.c_str())) ==  NULL)
+    {
+      OUT_ERROR("Error opening: " << path);
+      return false;
+    }
+
+    int frame_id = -1;
+    while((dirp = readdir(dp)) != NULL)
+    {
+      if(dirp->d_type != DT_REG)
+      {
+        continue;
+      }
+
+      std::string filename = dirp->d_name;
+      int file_frame_id;
+      try {
+        std::regex re("^(\\d+)_.*\\.yaml");
+        std::smatch match;
+        if (std::regex_search(filename, match, re) && match.size() > 1) {
+          file_frame_id = std::stoi(match.str(1));
+          if (file_frame_id > frame_id){
+            frame_id = file_frame_id;
+          }
+        }
+      } catch (std::regex_error& e) {
+        OUT_ERROR("RE Error: " << e.what());
+      } catch (std::invalid_argument& e) {
+        OUT_ERROR("STOI Error: " << e.what());
+      }
+    }
+    closedir(dp);
+
+    return frame_id + 1;
   }
 
   void run()
@@ -239,16 +320,29 @@ private:
 
   void callback(const sensor_msgs::Image::ConstPtr imageColor, const sensor_msgs::Image::ConstPtr imageIr, const sensor_msgs::Image::ConstPtr imageDepth)
   {
+
+    cv::Ptr<cv::aruco::DetectorParameters> detectorParams = cv::aruco::DetectorParameters::create();
+    bool refindStrategy = true;
+
     std::vector<cv::Point2f> pointsColor, pointsIr;
+
+    std::vector< int > aruco_ids_color;
+    std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
+    cv::Mat charuco_corners_color, charuco_ids_color;
+
+    std::vector< int > aruco_ids_ir;
+    std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
+    cv::Mat charuco_corners_ir, charuco_ids_ir;
+
     cv::Mat color, ir, irGrey, irScaled, depth;
     bool foundColor = false;
     bool foundIr = false;
 
-    if(mode == COLOR || mode == SYNC)
+    if(mode == COLOR || mode == SYNC || mode == ANY)
     {
       readImage(imageColor, color);
     }
-    if(mode == IR || mode == SYNC)
+    if(mode == IR || mode == SYNC || mode == ANY)
     {
       readImage(imageIr, ir);
       readImage(imageDepth, depth);
@@ -257,7 +351,7 @@ private:
       convertIr(irScaled, irGrey);
     }
 
-    if(circleBoard)
+    if(board_type == CIRCLE)
     {
       switch(mode)
       {
@@ -268,12 +362,13 @@ private:
         foundIr = cv::findCirclesGrid(irGrey, boardDims, pointsIr, circleFlags);
         break;
       case SYNC:
+      case ANY:
         foundColor = cv::findCirclesGrid(color, boardDims, pointsColor, circleFlags);
         foundIr = cv::findCirclesGrid(irGrey, boardDims, pointsIr, circleFlags);
         break;
       }
     }
-    else
+    else if(board_type == CHESS)
     {
       const cv::TermCriteria termCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::COUNT, 100, DBL_EPSILON);
       switch(mode)
@@ -285,6 +380,7 @@ private:
         foundIr = cv::findChessboardCorners(irGrey, boardDims, pointsIr, cv::CALIB_CB_ADAPTIVE_THRESH);
         break;
       case SYNC:
+      case ANY:
         foundColor = cv::findChessboardCorners(color, boardDims, pointsColor, cv::CALIB_CB_FAST_CHECK);
         foundIr = cv::findChessboardCorners(irGrey, boardDims, pointsIr, cv::CALIB_CB_ADAPTIVE_THRESH);
         break;
@@ -298,11 +394,87 @@ private:
         cv::cornerSubPix(irGrey, pointsIr, cv::Size(11, 11), cv::Size(-1, -1), termCriteria);
       }
     }
+    else if(board_type == CHARUCO)
+    {
+
+      switch(mode)
+      {
+      case COLOR:
+
+        // detect markers
+        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, aruco_ids_color, detectorParams, aruco_corners_rejected_color);
+
+        // refind strategy to detect more markers
+        if(refindStrategy) {
+          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, aruco_ids_color, aruco_corners_rejected_color);
+        }
+
+        // interpolate charuco corners
+        if(aruco_ids_color.size() > 0)
+            cv::aruco::interpolateCornersCharuco(aruco_corners_color, aruco_ids_color, color, charuco_board, charuco_corners_color, charuco_ids_color);
+        foundColor = aruco_ids_color.size() > 0;
+
+        break;
+      case IR:
+
+        // detect markers
+        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, aruco_ids_ir, detectorParams, aruco_corners_rejected_ir);
+
+        // refind strategy to detect more markers
+        if(refindStrategy) {
+          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, aruco_ids_ir, aruco_corners_rejected_ir);
+        }
+
+        // interpolate charuco corners
+        if(aruco_ids_ir.size() > 0)
+            cv::aruco::interpolateCornersCharuco(aruco_corners_ir, aruco_ids_ir, irGrey, charuco_board, charuco_corners_ir, charuco_ids_ir);
+        foundIr = aruco_ids_ir.size() > 0;
+
+        break;
+      case SYNC:
+      case ANY:
+
+        // detect markers
+        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, aruco_ids_color, detectorParams, aruco_corners_rejected_color);
+
+        // refind strategy to detect more markers
+        if(refindStrategy) {
+          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, aruco_ids_color, aruco_corners_rejected_color);
+        }
+
+        // interpolate charuco corners
+        if(aruco_ids_color.size() > 0)
+            cv::aruco::interpolateCornersCharuco(aruco_corners_color, aruco_ids_color, color, charuco_board, charuco_corners_color, charuco_ids_color);
+        foundColor = aruco_ids_color.size() > 0;
+
+
+        // detect markers
+        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, aruco_ids_ir, detectorParams, aruco_corners_rejected_ir);
+
+        // refind strategy to detect more markers
+        if(refindStrategy) {
+          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, aruco_ids_ir, aruco_corners_rejected_ir);
+        }
+
+        // interpolate charuco corners
+        if(aruco_ids_ir.size() > 0)
+            cv::aruco::interpolateCornersCharuco(aruco_corners_ir, aruco_ids_ir, irGrey, charuco_board, charuco_corners_ir, charuco_ids_ir);
+        foundIr = aruco_ids_ir.size() > 0;
+
+        break;
+      }
+
+    }
 
     if(foundIr)
     {
-      // Update min and max ir value based on checkerboard values
-      findMinMax(irScaled, pointsIr);
+      if(board_type == CHARUCO){
+        OUT_ERROR("NO MINMAX SCALING FOR CHARUCO IMPLEMENTED YET!!!");
+        findMinMax(irScaled, charuco_corners_ir);
+      }else{
+        // Update min and max ir value based on checkerboard values
+        findMinMax(irScaled, pointsIr);
+      }
     }
 
     lock.lock();
@@ -314,6 +486,20 @@ private:
     this->foundIr = foundIr;
     this->pointsColor = pointsColor;
     this->pointsIr = pointsIr;
+
+
+    this->aruco_ids_color = aruco_ids_color;
+    this->aruco_corners_color = aruco_corners_color;
+    this->aruco_corners_rejected_color = aruco_corners_rejected_color;
+    this->charuco_corners_color = charuco_corners_color;
+    this->charuco_ids_color = charuco_ids_color;
+
+    this->aruco_ids_ir = aruco_ids_ir;
+    this->aruco_corners_ir = aruco_corners_ir;
+    this->aruco_corners_rejected_ir = aruco_corners_rejected_ir;
+    this->charuco_corners_ir = charuco_corners_ir;
+    this->charuco_ids_ir = charuco_ids_ir;
+
     update = true;
     lock.unlock();
   }
@@ -327,6 +513,16 @@ private:
     bool foundIr = false;
     bool save = false;
     bool running = true;
+
+    std::vector< int > aruco_ids_color;
+    std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
+    cv::Mat charuco_corners_color, charuco_ids_color;
+
+    std::vector< int > aruco_ids_ir;
+    std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
+    cv::Mat charuco_corners_ir, charuco_ids_ir;
+    std::vector<cv::Point2f> charuco_corners_ir_as_points;
+
 
     std::chrono::milliseconds duration(1);
     while(!update && ros::ok())
@@ -347,21 +543,53 @@ private:
         foundIr = this->foundIr;
         pointsColor = this->pointsColor;
         pointsIr = this->pointsIr;
+
+        aruco_ids_color = this->aruco_ids_color;
+        aruco_corners_color = this->aruco_corners_color;
+        aruco_corners_rejected_color = this->aruco_corners_rejected_color;
+        charuco_corners_color = this->charuco_corners_color;
+        charuco_ids_color = this->charuco_ids_color;
+
+        aruco_ids_ir = this->aruco_ids_ir;
+        aruco_corners_ir = this->aruco_corners_ir;
+        aruco_corners_rejected_ir = this->aruco_corners_rejected_ir;
+        charuco_corners_ir = this->charuco_corners_ir;
+        charuco_ids_ir = this->charuco_ids_ir;
+
+
         update = false;
         lock.unlock();
 
-        if(mode == COLOR || mode == SYNC)
+        if(mode == COLOR || mode == SYNC || mode == ANY )
         {
           cv::cvtColor(color, colorDisp, CV_GRAY2BGR);
-          cv::drawChessboardCorners(colorDisp, boardDims, pointsColor, foundColor);
-          //cv::resize(colorDisp, colorDisp, cv::Size(), 0.5, 0.5);
+          if (board_type == CHARUCO){
+            if (aruco_ids_color.size() > 0){
+              cv::aruco::drawDetectedMarkers(colorDisp, aruco_corners_color);
+            }
+            if (charuco_corners_color.total() > 0){
+              cv::aruco::drawDetectedCornersCharuco(colorDisp, charuco_corners_color, charuco_ids_color);
+            }
+          }else{
+            cv::drawChessboardCorners(colorDisp, boardDims, pointsColor, foundColor);
+          }
+          cv::resize(colorDisp, colorDisp, cv::Size(), 0.75, 0.75);
           //cv::flip(colorDisp, colorDisp, 1);
         }
-        if(mode == IR || mode == SYNC)
+        if(mode == IR || mode == SYNC || mode == ANY)
         {
           cv::cvtColor(irGrey, irDisp, CV_GRAY2BGR);
-          cv::drawChessboardCorners(irDisp, boardDims, pointsIr, foundIr);
-          //cv::resize(irDisp, irDisp, cv::Size(), 0.5, 0.5);
+          if (board_type == CHARUCO){
+            if (aruco_ids_ir.size() > 0){
+              cv::aruco::drawDetectedMarkers(irDisp, aruco_corners_ir);
+            }
+            if (charuco_corners_ir.total() > 0){
+              cv::aruco::drawDetectedCornersCharuco(irDisp, charuco_corners_ir, charuco_ids_ir);
+            }
+          }else{
+            cv::drawChessboardCorners(irDisp, boardDims, pointsIr, foundIr);
+          }
+          cv::resize(irDisp, irDisp, cv::Size(), 0.75, 0.75);
           //cv::flip(irDisp, irDisp, 1);
         }
       }
@@ -375,6 +603,7 @@ private:
         cv::imshow("ir", irDisp);
         break;
       case SYNC:
+      case ANY:
         cv::imshow("color", colorDisp);
         cv::imshow("ir", irDisp);
         break;
@@ -413,9 +642,25 @@ private:
         break;
       }
 
-      if(save && ((mode == COLOR && foundColor) || (mode == IR && foundIr) || (mode == SYNC && foundColor && foundIr)))
-      {
-        store(color, ir, irGrey, depth, pointsColor, pointsIr);
+      if(save){
+        if( foundColor && ( (mode == COLOR) || ((mode == ANY) && !foundIr) ) ){
+          std::string base = get_store_filename_base("");
+          OUT_INFO("storing frame: " << base);
+          store_color(base, color, pointsColor);
+          // save = false;
+        }
+        if( foundIr && ( (mode == IR) || ((mode == ANY) && !foundColor) ) ){
+          std::string base = get_store_filename_base("");
+          OUT_INFO("storing frame: " << base);
+          store_ir(base, ir, irGrey, depth, pointsIr);
+          // save = false;
+        }
+        if( foundColor && foundIr && ( (mode == SYNC) || (mode == ANY) ) ){
+          std::string base = get_store_filename_base(CALIB_SYNC);
+          OUT_INFO("storing frame: " << base);
+          store_color(base, color, pointsColor);
+          store_ir(base, ir, irGrey, depth, pointsIr);
+        }
         save = false;
       }
     }
@@ -430,13 +675,24 @@ private:
     pCvImage->image.copyTo(image);
   }
 
-  void store(const cv::Mat &color, const cv::Mat &ir, const cv::Mat &irGrey, const cv::Mat &depth, const std::vector<cv::Point2f> &pointsColor, std::vector<cv::Point2f> &pointsIr)
-  {
+  std::string get_store_filename_base(std::string prefix){
     std::ostringstream oss;
     oss << std::setfill('0') << std::setw(4) << frame++;
     const std::string frameNumber(oss.str());
-    OUT_INFO("storing frame: " << frameNumber);
-    std::string base = path + frameNumber;
+    std::string base = path + frameNumber + prefix;
+    return base;
+  }
+
+  void store_color(std::string base, const cv::Mat &color, const std::vector<cv::Point2f> &pointsColor)
+  {
+    cv::imwrite(base + CALIB_FILE_COLOR, color, params);
+    cv::FileStorage file(base + CALIB_POINTS_COLOR, cv::FileStorage::WRITE);
+    file << "points" << pointsColor;
+  }
+
+
+  void store_ir(std::string base, const cv::Mat &ir, const cv::Mat &irGrey, const cv::Mat &depth, std::vector<cv::Point2f> &pointsIr)
+  {
 
     for(size_t i = 0; i < pointsIr.size(); ++i)
     {
@@ -444,35 +700,26 @@ private:
       pointsIr[i].y /= 2.0;
     }
 
-    if(mode == SYNC)
-    {
-      base += CALIB_SYNC;
-    }
+    cv::imwrite(base + CALIB_FILE_IR, ir, params);
+    cv::imwrite(base + CALIB_FILE_IR_GREY, irGrey, params);
+    cv::imwrite(base + CALIB_FILE_DEPTH, depth, params);
 
-    if(mode == COLOR || mode == SYNC)
-    {
-      cv::imwrite(base + CALIB_FILE_COLOR, color, params);
+    cv::FileStorage file(base + CALIB_POINTS_IR, cv::FileStorage::WRITE);
+    file << "points" << pointsIr;
 
-      cv::FileStorage file(base + CALIB_POINTS_COLOR, cv::FileStorage::WRITE);
-      file << "points" << pointsColor;
-    }
-
-    if(mode == IR || mode == SYNC)
-    {
-      cv::imwrite(base + CALIB_FILE_IR, ir, params);
-      cv::imwrite(base + CALIB_FILE_IR_GREY, irGrey, params);
-      cv::imwrite(base + CALIB_FILE_DEPTH, depth, params);
-
-      cv::FileStorage file(base + CALIB_POINTS_IR, cv::FileStorage::WRITE);
-      file << "points" << pointsIr;
-    }
   }
+
 };
+
+
+
+
+
 
 class CameraCalibration
 {
 private:
-  const bool circleBoard;
+  const Board board_type;
   const cv::Size boardDims;
   const float boardSize;
   const int flags;
@@ -496,22 +743,16 @@ private:
   std::vector<cv::Mat> rvecsColor, tvecsColor;
   std::vector<cv::Mat> rvecsIr, tvecsIr;
 
+  cv::Ptr<cv::aruco::Dictionary> aruco_dictionary;
+  cv::Ptr<cv::aruco::CharucoBoard> charuco_board;
+  cv::Ptr<cv::aruco::Board> aruco_board;
+
 public:
-  CameraCalibration(const std::string &path, const Source mode, const bool circleBoard, const bool symmetric, const cv::Size &boardDims, const float boardSize, const bool rational)
-      : circleBoard(circleBoard), boardDims(boardDims), boardSize(boardSize), flags(rational ? cv::CALIB_RATIONAL_MODEL : 0), mode(mode), path(path), sizeColor(1920, 1080), sizeIr(512, 424)
+  CameraCalibration(const std::string &path, const Source mode, const Board board_type, const cv::Size &boardDims, const float boardSize, const bool rational, const int aruco_dict_id)
+      : board_type(board_type), boardDims(boardDims), boardSize(boardSize), flags(rational ? cv::CALIB_RATIONAL_MODEL : 0), mode(mode), path(path), sizeColor(1920, 1080), sizeIr(512, 424)
   {
     board.resize(boardDims.width * boardDims.height);
-    if (symmetric)
-    {
-      for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
-      {
-        for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
-        {
-          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
-        }
-      }
-    }
-    else
+    if (board_type == ACIRCLE)
     {
       for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
       {
@@ -521,6 +762,24 @@ public:
         }
       }
     }
+    else
+    {
+      for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
+      {
+        for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
+        {
+          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
+        }
+      }
+    }
+
+    if (board_type == CHARUCO){
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // create charuco board object
+      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      aruco_board = charuco_board.staticCast<cv::aruco::Board>();
+    }
+
   }
 
   ~CameraCalibration()
@@ -626,6 +885,9 @@ public:
       ret = ret && checkSyncPointsOrder();
       ret = ret && loadCalibration();
       break;
+    case ANY:
+      OUT_ERROR("ANY not supported for calibration");
+      break;
     }
     return ret;
   }
@@ -642,6 +904,9 @@ public:
       break;
     case SYNC:
       calibrateExtrinsics();
+      break;
+    case ANY:
+      OUT_ERROR("ANY not supported for calibration");
       break;
     }
     storeCalibration();
@@ -775,6 +1040,9 @@ private:
     case IR:
       fs.open(path + K2_CALIB_IR, cv::FileStorage::WRITE);
       break;
+    case ANY:
+      OUT_ERROR("ANY not supported for calibration");
+      break;
     }
 
     if(!fs.isOpened())
@@ -802,6 +1070,9 @@ private:
       fs << K2_CALIB_DISTORTION << distortionIr;
       fs << K2_CALIB_ROTATION << rotationIr;
       fs << K2_CALIB_PROJECTION << projectionIr;
+      break;
+    case ANY:
+      OUT_ERROR("ANY not supported for calibration");
       break;
     }
     fs.release();
@@ -843,6 +1114,12 @@ private:
   }
 };
 
+
+
+
+
+
+
 class DepthCalibration
 {
 private:
@@ -862,17 +1139,17 @@ private:
   std::ofstream plot;
 
 public:
-  DepthCalibration(const std::string &path, const bool symmetric, const cv::Size &boardDims, const float boardSize)
+  DepthCalibration(const std::string &path, const Board board_type, const cv::Size &boardDims, const float boardSize)
       : path(path), size(512, 424)
   {
     board.resize(boardDims.width * boardDims.height);
-    if (symmetric)
+    if (board_type == ACIRCLE)
     {
       for (size_t r = 0, i = 0; r < (size_t)boardDims.height; ++r)
       {
         for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
         {
-          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
+          board[i] = cv::Point3f(float((2 * c + r % 2) * boardSize), float(r * boardSize), 0); //for asymmetrical circles
         }
       }
     }
@@ -882,7 +1159,7 @@ public:
       {
         for (size_t c = 0; c < (size_t)boardDims.width; ++c, ++i)
         {
-          board[i] = cv::Point3f(float((2 * c + r % 2) * boardSize), float(r * boardSize), 0); //for asymmetrical circles
+          board[i] = cv::Point3f(c * boardSize, r * boardSize, 0);
         }
       }
     }
@@ -1208,6 +1485,13 @@ private:
   }
 };
 
+
+
+
+
+
+
+
 void help(const std::string &path)
 {
   std::cout << path << FG_BLUE " [options]" << std::endl
@@ -1218,6 +1502,7 @@ void help(const std::string &path)
             << FG_YELLOW "    'circle<WIDTH>x<HEIGHT>x<SIZE>'  " NO_COLOR "for symmetric circle grid" << std::endl
             << FG_YELLOW "    'acircle<WIDTH>x<HEIGHT>x<SIZE>' " NO_COLOR "for asymmetric circle grid" << std::endl
             << FG_YELLOW "    'chess<WIDTH>x<HEIGHT>x<SIZE>'   " NO_COLOR "for chessboard pattern" << std::endl
+            << FG_YELLOW "    'charuco<WIDTH>x<HEIGHT>x<SIZE>'   " NO_COLOR "for charuco pattern" << std::endl
             << FG_GREEN "  distortion model" NO_COLOR ": " FG_YELLOW "'rational'" NO_COLOR " for using model with 8 instead of 5 coefficients" << std::endl
             << FG_GREEN "  output path" NO_COLOR ": " FG_YELLOW "'-path <PATH>'" NO_COLOR << std::endl;
 }
@@ -1235,8 +1520,8 @@ int main(int argc, char **argv)
 
   Mode mode = RECORD;
   Source source = SYNC;
-  bool circleBoard = false;
-  bool symmetric = true;
+  Board board_type = CHESS;
+  int aruco_dict_id = 8;
   bool rational = false;
   bool calibDepth = false;
   cv::Size boardDims = cv::Size(7, 6);
@@ -1281,6 +1566,10 @@ int main(int argc, char **argv)
     {
       source = SYNC;
     }
+    else if(arg == "any")
+    {
+      source = ANY;
+    }
     else if(arg == "depth")
     {
       calibDepth = true;
@@ -1291,7 +1580,7 @@ int main(int argc, char **argv)
     }
     else if(arg.find("circle") == 0 && arg.find('x') != arg.rfind('x') && arg.rfind('x') != std::string::npos)
     {
-      circleBoard = true;
+      board_type  = CIRCLE;
       const size_t start = 6;
       const size_t leftX = arg.find('x');
       const size_t rightX = arg.rfind('x');
@@ -1302,11 +1591,10 @@ int main(int argc, char **argv)
       boardSize = atof(arg.substr(rightX + 1, end - rightX + 1).c_str());
       boardDims = cv::Size(width, height);
     }
-    else if((arg.find("circle") == 0 || arg.find("acircle") == 0) && arg.find('x') != arg.rfind('x') && arg.rfind('x') != std::string::npos)
+    else if(arg.find("acircle") == 0 && arg.find('x') != arg.rfind('x') && arg.rfind('x') != std::string::npos)
     {
-      symmetric = arg.find("circle") == 0;
-      circleBoard = true;
-      const size_t start = 6 + (symmetric ? 0 : 1);
+      board_type  = ACIRCLE;
+      const size_t start = 7;
       const size_t leftX = arg.find('x');
       const size_t rightX = arg.rfind('x');
       const size_t end = arg.size();
@@ -1318,8 +1606,21 @@ int main(int argc, char **argv)
     }
     else if(arg.find("chess") == 0 && arg.find('x') != arg.rfind('x') && arg.rfind('x') != std::string::npos)
     {
-      circleBoard = false;
+      board_type  = CHESS;
       const size_t start = 5;
+      const size_t leftX = arg.find('x');
+      const size_t rightX = arg.rfind('x');
+      const size_t end = arg.size();
+
+      int width = atoi(arg.substr(start, leftX - start).c_str());
+      int height = atoi(arg.substr(leftX + 1, rightX - leftX + 1).c_str());
+      boardSize = atof(arg.substr(rightX + 1, end - rightX + 1).c_str());
+      boardDims = cv::Size(width, height);
+    }
+    else if(arg.find("charuco") == 0 && arg.find('x') != arg.rfind('x') && arg.rfind('x') != std::string::npos)
+    {
+      board_type  = CHARUCO;
+      const size_t start = 7;
       const size_t leftX = arg.find('x');
       const size_t rightX = arg.rfind('x');
       const size_t end = arg.size();
@@ -1357,7 +1658,7 @@ int main(int argc, char **argv)
   OUT_INFO("Start settings:" << std::endl
            << "       Mode: " FG_CYAN << (mode == RECORD ? "record" : "calibrate") << NO_COLOR << std::endl
            << "     Source: " FG_CYAN << (calibDepth ? "depth" : (source == COLOR ? "color" : (source == IR ? "ir" : "sync"))) << NO_COLOR << std::endl
-           << "      Board: " FG_CYAN << (circleBoard ? "circles" : "chess") << NO_COLOR << std::endl
+           << "      Board: " FG_CYAN << (board_type == CHESS ? "chess" : (board_type == CIRCLE ? "circle" : "charuco") ) << NO_COLOR << std::endl
            << " Dimensions: " FG_CYAN << boardDims.width << " x " << boardDims.height << NO_COLOR << std::endl
            << " Field size: " FG_CYAN << boardSize << NO_COLOR << std::endl
            << "Dist. model: " FG_CYAN << (rational ? '8' : '5') << " coefficients" << NO_COLOR << std::endl
@@ -1373,7 +1674,7 @@ int main(int argc, char **argv)
   }
   if(mode == RECORD)
   {
-    Recorder recorder(path, topicColor, topicIr, topicDepth, source, circleBoard, symmetric, boardDims, boardSize);
+    Recorder recorder(path, topicColor, topicIr, topicDepth, source, board_type, boardDims, boardSize, aruco_dict_id);
 
     OUT_INFO("starting recorder...");
     recorder.run();
@@ -1382,7 +1683,7 @@ int main(int argc, char **argv)
   }
   else if(calibDepth)
   {
-    DepthCalibration calib(path, symmetric, boardDims, boardSize);
+    DepthCalibration calib(path, board_type, boardDims, boardSize);
 
     OUT_INFO("restoring files...");
     calib.restore();
@@ -1392,7 +1693,7 @@ int main(int argc, char **argv)
   }
   else
   {
-    CameraCalibration calib(path, source, circleBoard, symmetric, boardDims, boardSize, rational);
+    CameraCalibration calib(path, source, board_type, boardDims, boardSize, rational, aruco_dict_id);
 
     OUT_INFO("restoring files...");
     calib.restore();
