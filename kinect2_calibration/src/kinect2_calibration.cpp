@@ -647,20 +647,28 @@ private:
         if( foundColor && ( (mode == COLOR) || ((mode == ANY) && !foundIr) ) ){
           std::string base = get_store_filename_base("");
           OUT_INFO("storing frame: " << base);
-          store_color(base, color, pointsColor);
+
+          for(size_t i = 0; i < this->aruco_corners_color.size(); ++i){
+              for(size_t j = 0; j < this->aruco_corners_color[i].size(); ++j){
+                OUT_INFO("i: " << i << ", j: " << j << ", v: " << this->aruco_corners_color[i][j]);
+              }
+          }
+
+
+          store_color(base, color, pointsColor, idsColor);
           // save = false;
         }
         if( foundIr && ( (mode == IR) || ((mode == ANY) && !foundColor) ) ){
           std::string base = get_store_filename_base("");
           OUT_INFO("storing frame: " << base);
-          store_ir(base, ir, irGrey, depth, pointsIr);
+          store_ir(base, ir, irGrey, depth, pointsIr, idsIr);
           // save = false;
         }
         if( foundColor && foundIr && ( (mode == SYNC) || (mode == ANY) ) ){
           std::string base = get_store_filename_base(CALIB_SYNC);
           OUT_INFO("storing frame: " << base);
-          store_color(base, color, pointsColor);
-          store_ir(base, ir, irGrey, depth, pointsIr);
+          store_color(base, color, pointsColor, idsColor);
+          store_ir(base, ir, irGrey, depth, pointsIr, idsIr);
         }
         save = false;
       }
@@ -684,15 +692,16 @@ private:
     return base;
   }
 
-  void store_color(std::string base, const cv::Mat &color, const std::vector<cv::Point2f> &pointsColor)
+  void store_color(std::string base, const cv::Mat &color, const std::vector<cv::Point2f> &pointsColor, const std::vector<int> &idsColor)
   {
     cv::imwrite(base + CALIB_FILE_COLOR, color, params);
     cv::FileStorage file(base + CALIB_POINTS_COLOR, cv::FileStorage::WRITE);
     file << "points" << pointsColor;
+    file << "ids" << idsColor;
   }
 
 
-  void store_ir(std::string base, const cv::Mat &ir, const cv::Mat &irGrey, const cv::Mat &depth, std::vector<cv::Point2f> &pointsIr)
+  void store_ir(std::string base, const cv::Mat &ir, const cv::Mat &irGrey, const cv::Mat &depth, std::vector<cv::Point2f> &pointsIr, const std::vector<int> &idsIr)
   {
 
     for(size_t i = 0; i < pointsIr.size(); ++i)
@@ -707,6 +716,7 @@ private:
 
     cv::FileStorage file(base + CALIB_POINTS_IR, cv::FileStorage::WRITE);
     file << "points" << pointsIr;
+    file << "ids" << idsIr;
 
   }
 
@@ -733,6 +743,10 @@ private:
   std::vector<std::vector<cv::Point3f> > pointsBoard;
   std::vector<std::vector<cv::Point2f> > pointsColor;
   std::vector<std::vector<cv::Point2f> > pointsIr;
+  std::vector<std::vector<int> > idsColor;
+  std::vector<std::vector<int> > idsIr;
+  std::vector<std::string> imagesColor;
+  std::vector<std::string> imagesIr;
 
   cv::Size sizeColor;
   cv::Size sizeIr;
@@ -792,6 +806,9 @@ public:
     std::vector<std::string> filesSync;
     std::vector<std::string> filesColor;
     std::vector<std::string> filesIr;
+    std::string suffixColor;
+    std::string suffixIr;
+
 
     DIR *dp;
     struct dirent *dirp;
@@ -858,8 +875,10 @@ public:
         return false;
       }
       pointsColor.resize(filesColor.size());
+      idsColor.resize(filesColor.size());
+      imagesColor.resize(filesColor.size());
       pointsBoard.resize(filesColor.size(), board);
-      ret = ret && readFiles(filesColor, CALIB_POINTS_COLOR, pointsColor);
+      ret = ret && readFiles(filesColor, CALIB_POINTS_COLOR, pointsColor, idsColor, imagesColor, CALIB_FILE_COLOR);
       break;
     case IR:
       if(filesIr.empty())
@@ -868,8 +887,10 @@ public:
         return false;
       }
       pointsIr.resize(filesIr.size());
+      idsIr.resize(filesIr.size());
       pointsBoard.resize(filesIr.size(), board);
-      ret = ret && readFiles(filesIr, CALIB_POINTS_IR, pointsIr);
+      imagesIr.resize(filesIr.size());
+      ret = ret && readFiles(filesIr, CALIB_POINTS_IR, pointsIr, idsIr, imagesIr, CALIB_FILE_IR);
       break;
     case SYNC:
       if(filesColor.empty() || filesIr.empty())
@@ -879,10 +900,18 @@ public:
       }
       pointsColor.resize(filesColor.size());
       pointsIr.resize(filesSync.size());
+      imagesIr.resize(filesSync.size());
       pointsColor.resize(filesSync.size());
+      imagesColor.resize(filesSync.size());
+      idsIr.resize(filesSync.size());
+      idsColor.resize(filesSync.size());
       pointsBoard.resize(filesSync.size(), board);
-      ret = ret && readFiles(filesSync, CALIB_POINTS_COLOR, pointsColor);
-      ret = ret && readFiles(filesSync, CALIB_POINTS_IR, pointsIr);
+      suffixColor = CALIB_SYNC;
+      suffixColor += CALIB_FILE_COLOR;
+      suffixIr = CALIB_SYNC;
+      suffixIr += CALIB_FILE_IR;
+      ret = ret && readFiles(filesSync, CALIB_POINTS_COLOR, pointsColor, idsColor, imagesColor, suffixColor);
+      ret = ret && readFiles(filesSync, CALIB_POINTS_IR, pointsIr, idsIr, imagesIr, suffixIr);
       ret = ret && checkSyncPointsOrder();
       ret = ret && loadCalibration();
       break;
@@ -898,10 +927,18 @@ public:
     switch(mode)
     {
     case COLOR:
-      calibrateIntrinsics(sizeColor, pointsBoard, pointsColor, cameraMatrixColor, distortionColor, rotationColor, projectionColor, rvecsColor, tvecsColor);
+      if (board_type == CHARUCO){
+        calibrateIntrinsicsCharuco(sizeColor, pointsBoard, pointsColor, idsColor, imagesColor, cameraMatrixColor, distortionColor, rotationColor, projectionColor, rvecsColor, tvecsColor);
+      }else{
+        calibrateIntrinsics(sizeColor, pointsBoard, pointsColor, cameraMatrixColor, distortionColor, rotationColor, projectionColor, rvecsColor, tvecsColor);
+      }
       break;
     case IR:
-      calibrateIntrinsics(sizeIr, pointsBoard, pointsIr, cameraMatrixIr, distortionIr, rotationIr, projectionIr, rvecsIr, tvecsIr);
+      if (board_type == CHARUCO){
+        calibrateIntrinsicsCharuco(sizeIr, pointsBoard, pointsIr, idsIr, imagesIr, cameraMatrixIr, distortionIr, rotationIr, projectionIr, rvecsIr, tvecsIr);
+      }else{
+        calibrateIntrinsics(sizeIr, pointsBoard, pointsIr, cameraMatrixIr, distortionIr, rotationIr, projectionIr, rvecsIr, tvecsIr);
+      }
       break;
     case SYNC:
       calibrateExtrinsics();
@@ -914,7 +951,7 @@ public:
   }
 
 private:
-  bool readFiles(const std::vector<std::string> &files, const std::string &ext, std::vector<std::vector<cv::Point2f> > &points) const
+  bool readFiles(const std::vector<std::string> &files, const std::string &ext, std::vector<std::vector<cv::Point2f> > &points, std::vector<std::vector<int> > &ids, std::vector<std::string> &images, const std::string &suffix ) const
   {
     bool ret = true;
     #pragma omp parallel for
@@ -937,6 +974,8 @@ private:
       else
       {
         file["points"] >> points[i];
+        file["ids"] >> ids[i];
+        images[i] = path + files[i] + suffix;
       }
     }
     return ret;
@@ -968,88 +1007,100 @@ private:
     return true;
   }
 
-  void calibrateIntrinsicsCharuco(const cv::Size &size, const std::vector<std::vector<cv::Point3f> > &pointsBoard, const std::vector<std::vector<cv::Point2f> > &points,
+  void calibrateIntrinsicsCharuco(const cv::Size &size, const std::vector<std::vector<cv::Point3f> > &pointsBoard, const std::vector<std::vector<cv::Point2f> > &points, const std::vector<std::vector<int> > &ids, const std::vector<std::string> &images,
                            cv::Mat &cameraMatrix, cv::Mat &distortion, cv::Mat &rotation, cv::Mat &projection, std::vector<cv::Mat> &rvecs, std::vector<cv::Mat> &tvecs)
   {
-    // if(points.empty())
-    // {
-    //   OUT_ERROR("no data for calibration provided!");
-    //   return;
-    // }
+
+    if(points.empty())
+    {
+      OUT_ERROR("no data for calibration provided!");
+      return;
+    }
+
+    double aruco_error, charuco_error;
+
+    OUT_INFO("calibrating intrinsics...");
+
+
+    // prepare data for calibration
+    std::vector< std::vector< cv::Point2f > > allPointsConcatenated;
+    std::vector< std::vector< std::vector< cv::Point2f > > > allCorners;
+    std::vector< int > allIdsConcatenated;
+    std::vector< int > markerCounterPerFrame;
+    markerCounterPerFrame.reserve(ids.size());
+
+
+    for(unsigned int file_idx = 0; file_idx < ids.size(); file_idx++) {
+        OUT_INFO("points " << points[file_idx].size() );
+        markerCounterPerFrame.push_back((int)ids[file_idx].size());
+
+        std::vector< std::vector< cv::Point2f > > tmp_frame;
+        for(unsigned int marker_idx = 0; marker_idx < ids[file_idx].size(); marker_idx++) {
+
+            std::vector<cv::Point2f> tmp_corners;
+            tmp_corners.push_back(points[file_idx][marker_idx*4+0]);
+            tmp_corners.push_back(points[file_idx][marker_idx*4+1]);
+            tmp_corners.push_back(points[file_idx][marker_idx*4+2]);
+            tmp_corners.push_back(points[file_idx][marker_idx*4+3]);
+            allPointsConcatenated.push_back(tmp_corners);
+            tmp_frame.push_back(tmp_corners);
+
+            allIdsConcatenated.push_back(ids[file_idx][marker_idx]);
+        }
+        allCorners.push_back(tmp_frame);
+
+    }
+
+
+    for(unsigned int i = 0; i < allPointsConcatenated.size(); i++) {
+        for(unsigned int j = 0; j < allPointsConcatenated[i].size(); j++) {
+            OUT_INFO("i: " << i << ", j:" << j << ", v:" << allPointsConcatenated[i][j] );
+        }
+    }
+
+
+    OUT_INFO("allPointsConcatenated" << allPointsConcatenated.size() << "points " << points.size() << ", allIds " << allIdsConcatenated.size()<< ", markerCount " << markerCounterPerFrame.size());
+    // calibrate camera using aruco markers
+    aruco_error = cv::aruco::calibrateCameraAruco(allPointsConcatenated, allIdsConcatenated,
+                                              markerCounterPerFrame, this->aruco_board, size, cameraMatrix,
+                                              distortion);
+
+    OUT_INFO("re-projection error: " << aruco_error << std::endl);
+
+    // prepare data for charuco calibration
+    int nFrames = (int)points.size();
+    std::vector< cv::Mat > allCharucoCorners;
+    std::vector< cv::Mat > allCharucoIds;
+    // std::vector< cv::Mat > filteredImages;
+    cv::Mat img;
+    allCharucoCorners.reserve(nFrames);
+    allCharucoIds.reserve(nFrames);
     //
-    // double aruco_error, charuco_error;
-    //
-    // OUT_INFO("calibrating intrinsics...");
-    //
-    //
-    // // prepare data for calibration
-    // vector< vector< Point2f > > allCornersConcatenated;
-    // vector< int > allIdsConcatenated;
-    // vector< int > markerCounterPerFrame;
-    // markerCounterPerFrame.reserve(allCorners.size());
-    // for(unsigned int i = 0; i < allCorners.size(); i++) {
-    //     markerCounterPerFrame.push_back((int)allCorners[i].size());
-    //     for(unsigned int j = 0; j < allCorners[i].size(); j++) {
-    //         allCornersConcatenated.push_back(allCorners[i][j]);
-    //         allIdsConcatenated.push_back(allIds[i][j]);
-    //     }
-    // }
-    //
-    // // calibrate camera using aruco markers
-    // double arucoRepErr;
-    // arucoRepErr = aruco::calibrateCameraAruco(allCornersConcatenated, allIdsConcatenated,
-    //                                           markerCounterPerFrame, board, imgSize, cameraMatrix,
-    //                                           distortion, noArray(), noArray(), calibrationFlags);
-    //     error = cv::calibrateCamera(pointsBoard, points, size, cameraMatrix, distortion, rvecs, tvecs, flags, termCriteria);
-    //     OUT_INFO("re-projection error: " << error << std::endl);
-    //
-    // // prepare data for charuco calibration
-    // int nFrames = (int)allCorners.size();
-    // vector< Mat > allCharucoCorners;
-    // vector< Mat > allCharucoIds;
-    // vector< Mat > filteredImages;
-    // allCharucoCorners.reserve(nFrames);
-    // allCharucoIds.reserve(nFrames);
-    //
-    // for(int i = 0; i < nFrames; i++) {
-    //     // interpolate using camera parameters
-    //     Mat currentCharucoCorners, currentCharucoIds;
-    //     aruco::interpolateCornersCharuco(allCorners[i], allIds[i], allImgs[i], charucoboard,
-    //                                      currentCharucoCorners, currentCharucoIds, cameraMatrix,
-    //                                      distortion);
-    //
-    //     allCharucoCorners.push_back(currentCharucoCorners);
-    //     allCharucoIds.push_back(currentCharucoIds);
-    //     filteredImages.push_back(allImgs[i]);
-    // }
-    //
-    // if(allCharucoCorners.size() < 4) {
-    //     cerr << "Not enough corners for calibration" << endl;
-    //     return 0;
-    // }
-    //
-    // // calibrate camera using charuco
-    // error =
-    //     aruco::calibrateCameraCharuco(allCharucoCorners, allCharucoIds, charucoboard, imgSize,
-    //                                   cameraMatrix, distortion, rvecs, tvecs, calibrationFlags);
-    //
-    //
-    //
-    //
-    //
-    //
-    // // const cv::TermCriteria termCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 50, DBL_EPSILON);
-    // // double error;
-    // //
-    // // OUT_INFO("calibrating intrinsics...");
-    // error = cv::calibrateCamera(pointsBoard, points, size, cameraMatrix, distortion, rvecs, tvecs, flags, termCriteria);
-    // OUT_INFO("re-projection error: " << error << std::endl);
-    //
-    // OUT_INFO("Camera Matrix:" << std::endl << cameraMatrix);
-    // OUT_INFO("Distortion Coeeficients:" << std::endl << distortion << std::endl);
-    // rotation = cv::Mat::eye(3, 3, CV_64F);
-    // projection = cv::Mat::eye(4, 4, CV_64F);
-    // cameraMatrix.copyTo(projection(cv::Rect(0, 0, 3, 3)));
+    for(int i = 0; i < nFrames; i++) {
+        // interpolate using camera parameters
+
+        img = cv::imread(images[i]);
+
+        cv::Mat currentCharucoCorners, currentCharucoIds;
+        cv::aruco::interpolateCornersCharuco(allCorners[i], ids[i], img, this->charuco_board,
+                                         currentCharucoCorners, currentCharucoIds, cameraMatrix,
+                                         distortion);
+
+        allCharucoCorners.push_back(currentCharucoCorners);
+        allCharucoIds.push_back(currentCharucoIds);
+        // filteredImages.push_back(img[i]);
+    }
+
+    if(allCharucoCorners.size() < 4) {
+        OUT_ERROR("Not enough corners for calibration");
+        return;
+    }
+
+    // calibrate camera using charuco
+    charuco_error = cv::aruco::calibrateCameraCharuco(allCharucoCorners, allCharucoIds, this->charuco_board, size,
+                                      cameraMatrix, distortion, rvecs, tvecs);
+    OUT_INFO("re-projection error (charuco): " << charuco_error << std::endl);
+
   }
 
   void calibrateIntrinsics(const cv::Size &size, const std::vector<std::vector<cv::Point3f> > &pointsBoard, const std::vector<std::vector<cv::Point2f> > &points,
