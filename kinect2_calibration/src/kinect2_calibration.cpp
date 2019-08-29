@@ -101,20 +101,17 @@ private:
 
   std::vector<cv::Point3f> board;
   std::vector<cv::Point2f> pointsColor, pointsIr;
+  std::vector<int> idsColor, idsIr;
 
 
-  std::vector< int > aruco_ids_color;
-  std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
-  cv::Mat charuco_corners_color, charuco_ids_color;
-
-  std::vector< int > aruco_ids_ir;
-  std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
-  cv::Mat charuco_corners_ir, charuco_ids_ir;
 
   cv::Ptr<cv::aruco::Dictionary> aruco_dictionary;
   cv::Ptr<cv::aruco::CharucoBoard> charuco_board;
   cv::Ptr<cv::aruco::Board> aruco_board;
 
+
+    std::vector< std::vector< cv::Point2f > > aruco_corners_ir;
+    std::vector< std::vector< cv::Point2f > > aruco_corners_color;
 
 
 
@@ -293,6 +290,7 @@ private:
   {
     minIr = 0xFFFF;
     maxIr = 0;
+    OUT_INFO(":::vec::: ");
     for(size_t i = 0; i < pointsIr.size(); ++i)
     {
       const cv::Point2f &p = pointsIr[i];
@@ -325,14 +323,11 @@ private:
     bool refindStrategy = true;
 
     std::vector<cv::Point2f> pointsColor, pointsIr;
+    std::vector<int> idsColor, idsIr;
 
-    std::vector< int > aruco_ids_color;
     std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
-    cv::Mat charuco_corners_color, charuco_ids_color;
 
-    std::vector< int > aruco_ids_ir;
     std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
-    cv::Mat charuco_corners_ir, charuco_ids_ir;
 
     cv::Mat color, ir, irGrey, irScaled, depth;
     bool foundColor = false;
@@ -402,79 +397,91 @@ private:
       case COLOR:
 
         // detect markers
-        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, aruco_ids_color, detectorParams, aruco_corners_rejected_color);
+        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, idsColor, detectorParams, aruco_corners_rejected_color);
+
 
         // refind strategy to detect more markers
         if(refindStrategy) {
-          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, aruco_ids_color, aruco_corners_rejected_color);
+          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, idsColor, aruco_corners_rejected_color);
         }
 
-        // interpolate charuco corners
-        if(aruco_ids_color.size() > 0)
-            cv::aruco::interpolateCornersCharuco(aruco_corners_color, aruco_ids_color, color, charuco_board, charuco_corners_color, charuco_ids_color);
-        foundColor = aruco_ids_color.size() > 0;
+        foundColor = idsColor.size() > 0;
+
+        if (foundColor){
+            for(size_t i = 0; i < aruco_corners_color.size(); ++i){
+                for(size_t j = 0; j < aruco_corners_color[i].size(); ++j){
+                  pointsColor.push_back(aruco_corners_color[i][j]);
+                }
+            }
+        }
 
         break;
       case IR:
 
         // detect markers
-        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, aruco_ids_ir, detectorParams, aruco_corners_rejected_ir);
+        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, idsIr, detectorParams, aruco_corners_rejected_ir);
 
         // refind strategy to detect more markers
         if(refindStrategy) {
-          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, aruco_ids_ir, aruco_corners_rejected_ir);
+          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, idsIr, aruco_corners_rejected_ir);
         }
 
-        // interpolate charuco corners
-        if(aruco_ids_ir.size() > 0)
-            cv::aruco::interpolateCornersCharuco(aruco_corners_ir, aruco_ids_ir, irGrey, charuco_board, charuco_corners_ir, charuco_ids_ir);
-        foundIr = aruco_ids_ir.size() > 0;
+        foundIr = idsIr.size() > 0;
+
+         if (foundIr){
+            for(size_t i = 0; i < aruco_corners_ir.size(); ++i){
+                for(size_t j = 0; j < aruco_corners_ir[i].size(); ++j){
+                  pointsIr.push_back(aruco_corners_ir[i][j]);
+                }
+            }
+        }
 
         break;
       case SYNC:
       case ANY:
 
         // detect markers
-        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, aruco_ids_color, detectorParams, aruco_corners_rejected_color);
+        cv::aruco::detectMarkers(color, aruco_dictionary, aruco_corners_color, idsColor, detectorParams, aruco_corners_rejected_color);
 
         // refind strategy to detect more markers
         if(refindStrategy) {
-          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, aruco_ids_color, aruco_corners_rejected_color);
+          cv::aruco::refineDetectedMarkers(color, aruco_board, aruco_corners_color, idsColor, aruco_corners_rejected_color);
         }
+        foundColor = idsColor.size() > 0;
 
-        // interpolate charuco corners
-        if(aruco_ids_color.size() > 0)
-            cv::aruco::interpolateCornersCharuco(aruco_corners_color, aruco_ids_color, color, charuco_board, charuco_corners_color, charuco_ids_color);
-        foundColor = aruco_ids_color.size() > 0;
-
+        if (foundColor){
+            for(size_t i = 0; i < aruco_corners_color.size(); ++i){
+                for(size_t j = 0; j < aruco_corners_color[i].size(); ++j){
+                  pointsColor.push_back(aruco_corners_color[i][j]);
+                }
+            }
+        }
 
         // detect markers
-        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, aruco_ids_ir, detectorParams, aruco_corners_rejected_ir);
+        cv::aruco::detectMarkers(irGrey, aruco_dictionary, aruco_corners_ir, idsIr, detectorParams, aruco_corners_rejected_ir);
 
         // refind strategy to detect more markers
         if(refindStrategy) {
-          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, aruco_ids_ir, aruco_corners_rejected_ir);
+          cv::aruco::refineDetectedMarkers(irGrey, aruco_board, aruco_corners_ir, idsIr, aruco_corners_rejected_ir);
         }
+        foundIr = idsIr.size() > 0;
 
-        // interpolate charuco corners
-        if(aruco_ids_ir.size() > 0)
-            cv::aruco::interpolateCornersCharuco(aruco_corners_ir, aruco_ids_ir, irGrey, charuco_board, charuco_corners_ir, charuco_ids_ir);
-        foundIr = aruco_ids_ir.size() > 0;
+
+        if (foundIr){
+            for(size_t i = 0; i < aruco_corners_ir.size(); ++i){
+                for(size_t j = 0; j < aruco_corners_ir[i].size(); ++j){
+                  pointsIr.push_back(aruco_corners_ir[i][j]);
+                }
+            }
+        }
 
         break;
       }
 
     }
 
-    if(foundIr)
-    {
-      if(board_type == CHARUCO){
-        OUT_ERROR("NO MINMAX SCALING FOR CHARUCO IMPLEMENTED YET!!!");
-        findMinMax(irScaled, charuco_corners_ir);
-      }else{
-        // Update min and max ir value based on checkerboard values
-        findMinMax(irScaled, pointsIr);
-      }
+    if(foundIr){
+      findMinMax(irScaled, pointsIr);
     }
 
     lock.lock();
@@ -486,19 +493,11 @@ private:
     this->foundIr = foundIr;
     this->pointsColor = pointsColor;
     this->pointsIr = pointsIr;
-
-
-    this->aruco_ids_color = aruco_ids_color;
-    this->aruco_corners_color = aruco_corners_color;
-    this->aruco_corners_rejected_color = aruco_corners_rejected_color;
-    this->charuco_corners_color = charuco_corners_color;
-    this->charuco_ids_color = charuco_ids_color;
-
-    this->aruco_ids_ir = aruco_ids_ir;
+    this->idsColor = idsColor;
+    this->idsIr = idsIr;
     this->aruco_corners_ir = aruco_corners_ir;
-    this->aruco_corners_rejected_ir = aruco_corners_rejected_ir;
-    this->charuco_corners_ir = charuco_corners_ir;
-    this->charuco_ids_ir = charuco_ids_ir;
+    this->aruco_corners_color = aruco_corners_color;
+
 
     update = true;
     lock.unlock();
@@ -507,6 +506,7 @@ private:
   void display()
   {
     std::vector<cv::Point2f> pointsColor, pointsIr;
+    std::vector<int> idsColor, idsIr;
     cv::Mat color, ir, irGrey, depth;
     cv::Mat colorDisp, irDisp;
     bool foundColor = false;
@@ -514,14 +514,12 @@ private:
     bool save = false;
     bool running = true;
 
-    std::vector< int > aruco_ids_color;
     std::vector< std::vector< cv::Point2f > > aruco_corners_color, aruco_corners_rejected_color;
     cv::Mat charuco_corners_color, charuco_ids_color;
 
-    std::vector< int > aruco_ids_ir;
     std::vector< std::vector< cv::Point2f > > aruco_corners_ir, aruco_corners_rejected_ir;
     cv::Mat charuco_corners_ir, charuco_ids_ir;
-    std::vector<cv::Point2f> charuco_corners_ir_as_points;
+
 
 
     std::chrono::milliseconds duration(1);
@@ -543,18 +541,10 @@ private:
         foundIr = this->foundIr;
         pointsColor = this->pointsColor;
         pointsIr = this->pointsIr;
-
-        aruco_ids_color = this->aruco_ids_color;
+        idsColor = this->idsColor;
+        idsIr = this->idsIr;
         aruco_corners_color = this->aruco_corners_color;
-        aruco_corners_rejected_color = this->aruco_corners_rejected_color;
-        charuco_corners_color = this->charuco_corners_color;
-        charuco_ids_color = this->charuco_ids_color;
-
-        aruco_ids_ir = this->aruco_ids_ir;
         aruco_corners_ir = this->aruco_corners_ir;
-        aruco_corners_rejected_ir = this->aruco_corners_rejected_ir;
-        charuco_corners_ir = this->charuco_corners_ir;
-        charuco_ids_ir = this->charuco_ids_ir;
 
 
         update = false;
@@ -564,9 +554,15 @@ private:
         {
           cv::cvtColor(color, colorDisp, CV_GRAY2BGR);
           if (board_type == CHARUCO){
-            if (aruco_ids_color.size() > 0){
+            if (idsColor.size() > 0){
               cv::aruco::drawDetectedMarkers(colorDisp, aruco_corners_color);
             }
+
+
+            // interpolate charuco corners
+            if(idsColor.size() > 0)
+                cv::aruco::interpolateCornersCharuco(aruco_corners_color, idsColor, color, charuco_board, charuco_corners_color, charuco_ids_color);
+
             if (charuco_corners_color.total() > 0){
               cv::aruco::drawDetectedCornersCharuco(colorDisp, charuco_corners_color, charuco_ids_color);
             }
@@ -580,9 +576,14 @@ private:
         {
           cv::cvtColor(irGrey, irDisp, CV_GRAY2BGR);
           if (board_type == CHARUCO){
-            if (aruco_ids_ir.size() > 0){
+            if (idsIr.size() > 0){
               cv::aruco::drawDetectedMarkers(irDisp, aruco_corners_ir);
             }
+
+            // interpolate charuco corners
+            if(idsIr.size() > 0)
+                cv::aruco::interpolateCornersCharuco(aruco_corners_ir, idsIr, irGrey, charuco_board, charuco_corners_ir, charuco_ids_ir);
+
             if (charuco_corners_ir.total() > 0){
               cv::aruco::drawDetectedCornersCharuco(irDisp, charuco_corners_ir, charuco_ids_ir);
             }
@@ -965,6 +966,90 @@ private:
       }
     }
     return true;
+  }
+
+  void calibrateIntrinsicsCharuco(const cv::Size &size, const std::vector<std::vector<cv::Point3f> > &pointsBoard, const std::vector<std::vector<cv::Point2f> > &points,
+                           cv::Mat &cameraMatrix, cv::Mat &distortion, cv::Mat &rotation, cv::Mat &projection, std::vector<cv::Mat> &rvecs, std::vector<cv::Mat> &tvecs)
+  {
+    // if(points.empty())
+    // {
+    //   OUT_ERROR("no data for calibration provided!");
+    //   return;
+    // }
+    //
+    // double aruco_error, charuco_error;
+    //
+    // OUT_INFO("calibrating intrinsics...");
+    //
+    //
+    // // prepare data for calibration
+    // vector< vector< Point2f > > allCornersConcatenated;
+    // vector< int > allIdsConcatenated;
+    // vector< int > markerCounterPerFrame;
+    // markerCounterPerFrame.reserve(allCorners.size());
+    // for(unsigned int i = 0; i < allCorners.size(); i++) {
+    //     markerCounterPerFrame.push_back((int)allCorners[i].size());
+    //     for(unsigned int j = 0; j < allCorners[i].size(); j++) {
+    //         allCornersConcatenated.push_back(allCorners[i][j]);
+    //         allIdsConcatenated.push_back(allIds[i][j]);
+    //     }
+    // }
+    //
+    // // calibrate camera using aruco markers
+    // double arucoRepErr;
+    // arucoRepErr = aruco::calibrateCameraAruco(allCornersConcatenated, allIdsConcatenated,
+    //                                           markerCounterPerFrame, board, imgSize, cameraMatrix,
+    //                                           distortion, noArray(), noArray(), calibrationFlags);
+    //     error = cv::calibrateCamera(pointsBoard, points, size, cameraMatrix, distortion, rvecs, tvecs, flags, termCriteria);
+    //     OUT_INFO("re-projection error: " << error << std::endl);
+    //
+    // // prepare data for charuco calibration
+    // int nFrames = (int)allCorners.size();
+    // vector< Mat > allCharucoCorners;
+    // vector< Mat > allCharucoIds;
+    // vector< Mat > filteredImages;
+    // allCharucoCorners.reserve(nFrames);
+    // allCharucoIds.reserve(nFrames);
+    //
+    // for(int i = 0; i < nFrames; i++) {
+    //     // interpolate using camera parameters
+    //     Mat currentCharucoCorners, currentCharucoIds;
+    //     aruco::interpolateCornersCharuco(allCorners[i], allIds[i], allImgs[i], charucoboard,
+    //                                      currentCharucoCorners, currentCharucoIds, cameraMatrix,
+    //                                      distortion);
+    //
+    //     allCharucoCorners.push_back(currentCharucoCorners);
+    //     allCharucoIds.push_back(currentCharucoIds);
+    //     filteredImages.push_back(allImgs[i]);
+    // }
+    //
+    // if(allCharucoCorners.size() < 4) {
+    //     cerr << "Not enough corners for calibration" << endl;
+    //     return 0;
+    // }
+    //
+    // // calibrate camera using charuco
+    // error =
+    //     aruco::calibrateCameraCharuco(allCharucoCorners, allCharucoIds, charucoboard, imgSize,
+    //                                   cameraMatrix, distortion, rvecs, tvecs, calibrationFlags);
+    //
+    //
+    //
+    //
+    //
+    //
+    // // const cv::TermCriteria termCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 50, DBL_EPSILON);
+    // // double error;
+    // //
+    // // OUT_INFO("calibrating intrinsics...");
+    // error = cv::calibrateCamera(pointsBoard, points, size, cameraMatrix, distortion, rvecs, tvecs, flags, termCriteria);
+    // OUT_INFO("re-projection error: " << error << std::endl);
+    //
+    // OUT_INFO("Camera Matrix:" << std::endl << cameraMatrix);
+    // OUT_INFO("Distortion Coeeficients:" << std::endl << distortion << std::endl);
+    // rotation = cv::Mat::eye(3, 3, CV_64F);
+    // projection = cv::Mat::eye(4, 4, CV_64F);
+    // cameraMatrix.copyTo(projection(cv::Rect(0, 0, 3, 3)));
   }
 
   void calibrateIntrinsics(const cv::Size &size, const std::vector<std::vector<cv::Point3f> > &pointsBoard, const std::vector<std::vector<cv::Point2f> > &points,
