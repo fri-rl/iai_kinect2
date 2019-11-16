@@ -24,7 +24,7 @@ find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
 find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration)
 
 ## System dependencies are found with CMake's conventions
-find_package(OpenCV 4.1.1 REQUIRED)
+find_package(OpenCV REQUIRED)
 
 ################################################
 ## Declare ROS messages, services and actions ##

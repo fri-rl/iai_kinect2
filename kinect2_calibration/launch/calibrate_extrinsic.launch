@@ -1,0 +1,25 @@
+<launch>
+
+  <arg name="camA_info"/>
+  <arg name="camB_info"/>
+  <arg name="camA_tf_frame"/>
+  <arg name="camB_tf_frame"/>
+  <arg name="referenceA_tf_frame"/>
+  <arg name="referenceB_tf_frame"/>
+  <arg name="boardA_tf_frame" default="boardA"/>
+  <arg name="boardB_tf_frame" default="boardB"/>
+  <arg name="board" default="charuco3x4x0.065"/>
+  <arg name="path" default="$(env PWD)"/>
+
+  <remap from="camA_info" to="$(arg camA_info)" />
+  <remap from="camB_info" to="$(arg camB_info)" />
+  <node pkg="kinect2_calibration" type="camera_ext_calibration" name="ext_calibration" required="true" output="screen" args="-path $(arg path) $(arg board)" cwd="node">
+    <rosparam param="referenceA_tf_frame" subst_value="true">$(arg referenceA_tf_frame)</rosparam>
+    <rosparam param="referenceB_tf_frame" subst_value="true">$(arg referenceB_tf_frame)</rosparam>
+    <rosparam param="camA_tf_frame" subst_value="true">$(arg camA_tf_frame)</rosparam>
+    <rosparam param="camB_tf_frame" subst_value="true">$(arg camB_tf_frame)</rosparam>
+    <rosparam param="boardA_tf_frame" subst_value="true">$(arg boardA_tf_frame)</rosparam>
+    <rosparam param="boardB_tf_frame" subst_value="true">$(arg boardB_tf_frame)</rosparam>
+  </node>
+
+</launch>

@@ -290,7 +290,7 @@ private:
   {
     minIr = 0xFFFF;
     maxIr = 0;
-    OUT_INFO(":::vec::: ");
+    // OUT_INFO(":::vec::: ");
     for(size_t i = 0; i < pointsIr.size(); ++i)
     {
       const cv::Point2f &p = pointsIr[i];
@@ -806,9 +806,6 @@ public:
     std::vector<std::string> filesSync;
     std::vector<std::string> filesColor;
     std::vector<std::string> filesIr;
-    std::string suffixColor;
-    std::string suffixIr;
-
 
     DIR *dp;
     struct dirent *dirp;
@@ -906,12 +903,8 @@ public:
       idsIr.resize(filesSync.size());
       idsColor.resize(filesSync.size());
       pointsBoard.resize(filesSync.size(), board);
-      suffixColor = CALIB_SYNC;
-      suffixColor += CALIB_FILE_COLOR;
-      suffixIr = CALIB_SYNC;
-      suffixIr += CALIB_FILE_IR;
-      ret = ret && readFiles(filesSync, CALIB_POINTS_COLOR, pointsColor, idsColor, imagesColor, suffixColor);
-      ret = ret && readFiles(filesSync, CALIB_POINTS_IR, pointsIr, idsIr, imagesIr, suffixIr);
+      ret = ret && readFiles(filesSync, CALIB_POINTS_COLOR, pointsColor, idsColor, imagesColor, CALIB_FILE_COLOR);
+      ret = ret && readFiles(filesSync, CALIB_POINTS_IR, pointsIr, idsIr, imagesIr, CALIB_FILE_IR);
       ret = ret && checkSyncPointsOrder();
       ret = ret && loadCalibration();
       break;
@@ -941,7 +934,11 @@ public:
       }
       break;
     case SYNC:
-      calibrateExtrinsics();
+      if (board_type == CHARUCO){
+        calibrateSyncCharuco();
+      }else{
+        calibrateSync();
+      }
       break;
     case ANY:
       OUT_ERROR("ANY not supported for calibration");
@@ -989,6 +986,11 @@ private:
       return false;
     }
 
+    if (board_type == CHARUCO){
+      return true;
+    }
+
+
     for(size_t i = 0; i < pointsColor.size(); ++i)
     {
       const std::vector<cv::Point2f> &pColor = pointsColor[i];
@@ -1028,12 +1030,32 @@ private:
     std::vector< int > allIdsConcatenated;
     std::vector< int > markerCounterPerFrame;
     markerCounterPerFrame.reserve(ids.size());
+    //
+    //
+    // OUT_INFO("============ PASSSED =============" << std::endl);
+    // for (size_t fIdx=0; fIdx <  ids.size(); fIdx++){
+    //   OUT_INFO("####" << fIdx << " " << images[fIdx] << "####");
+    //   for (size_t mIdx=0; mIdx < ids[fIdx].size(); mIdx++ ){
+    //     OUT_INFO(mIdx << ": corners[" << ids[fIdx][mIdx] <<"] " << points[fIdx][mIdx*4+0] <<", "<< points[fIdx][mIdx*4+1] <<", "<< points[fIdx][mIdx*4+2] <<", "<< points[fIdx][mIdx*4+3] );
+    //   }
+    //   OUT_INFO("#############" << std::endl);
+    // }
+    //
+    // OUT_INFO("============ ABSOLUTE =============" << std::endl);
+    // for (size_t fIdx=0; fIdx <  idsColor.size(); fIdx++){
+    //   OUT_INFO("####" << fIdx << " " << imagesColor[fIdx] << "####");
+    //   for (size_t mIdx=0; mIdx < idsColor[fIdx].size(); mIdx++ ){
+    //     OUT_INFO(mIdx << ": corners[" << idsColor[fIdx][mIdx] <<"] " << pointsColor[fIdx][mIdx*4+0] <<", "<< pointsColor[fIdx][mIdx*4+1] <<", "<< pointsColor[fIdx][mIdx*4+2] <<", "<< pointsColor[fIdx][mIdx*4+3] );
+    //   }
+    //   OUT_INFO("#############" << std::endl);
+    // }
 
 
     for(unsigned int file_idx = 0; file_idx < ids.size(); file_idx++) {
-        OUT_INFO("points " << points[file_idx].size() );
+        // OUT_INFO("points " << points[file_idx].size() );
         markerCounterPerFrame.push_back((int)ids[file_idx].size());
 
+        OUT_INFO(std::endl << "file: " << file_idx << " | " << images[file_idx]);
         std::vector< std::vector< cv::Point2f > > tmp_frame;
         for(unsigned int marker_idx = 0; marker_idx < ids[file_idx].size(); marker_idx++) {
 
@@ -1046,17 +1068,19 @@ private:
             tmp_frame.push_back(tmp_corners);
 
             allIdsConcatenated.push_back(ids[file_idx][marker_idx]);
+            OUT_INFO(marker_idx << ": corners["<< ids[file_idx][marker_idx] <<"] " << tmp_corners[0] <<", "<< tmp_corners[1] <<", "<< tmp_corners[2] <<", "<< tmp_corners[3] );
+
         }
         allCorners.push_back(tmp_frame);
 
     }
 
 
-    for(unsigned int i = 0; i < allPointsConcatenated.size(); i++) {
-        for(unsigned int j = 0; j < allPointsConcatenated[i].size(); j++) {
-            OUT_INFO("i: " << i << ", j:" << j << ", v:" << allPointsConcatenated[i][j] );
-        }
-    }
+    // for(unsigned int i = 0; i < allPointsConcatenated.size(); i++) {
+    //     for(unsigned int j = 0; j < allPointsConcatenated[i].size(); j++) {
+    //         OUT_INFO("i: " << i << ", j:" << j << ", v:" << allPointsConcatenated[i][j] );
+    //     }
+    // }
 
 
     OUT_INFO("allPointsConcatenated" << allPointsConcatenated.size() << "points " << points.size() << ", allIds " << allIdsConcatenated.size()<< ", markerCount " << markerCounterPerFrame.size());
@@ -1085,6 +1109,8 @@ private:
         cv::aruco::interpolateCornersCharuco(allCorners[i], ids[i], img, this->charuco_board,
                                          currentCharucoCorners, currentCharucoIds, cameraMatrix,
                                          distortion);
+       OUT_INFO("currentCharucoCorners:" << std::endl << currentCharucoCorners << std::endl);
+       OUT_INFO("currentCharucoIds:" << std::endl << currentCharucoIds << std::endl);
 
         allCharucoCorners.push_back(currentCharucoCorners);
         allCharucoIds.push_back(currentCharucoIds);
@@ -1125,7 +1151,7 @@ private:
     cameraMatrix.copyTo(projection(cv::Rect(0, 0, 3, 3)));
   }
 
-  void calibrateExtrinsics()
+  void calibrateSync()
   {
     if(pointsColor.size() != pointsIr.size())
     {
@@ -1160,6 +1186,161 @@ private:
     OUT_INFO("Essential:" << std::endl << essential);
     OUT_INFO("Fundamental:" << std::endl << fundamental << std::endl);
   }
+
+
+    void calibrateSyncCharuco()
+    {
+      if(pointsColor.size() != pointsIr.size())
+      {
+        OUT_ERROR("number of detected color and ir patterns does not match!");
+        return;
+      }
+      if(pointsColor.empty() || pointsIr.empty())
+      {
+        OUT_ERROR("no data for calibration provided!");
+        return;
+      }
+      const cv::TermCriteria termCriteria(cv::TermCriteria::COUNT + cv::TermCriteria::EPS, 100, DBL_EPSILON);
+      double error;
+
+      OUT_INFO("Camera Matrix Color:" << std::endl << cameraMatrixColor);
+      OUT_INFO("Distortion Coeeficients Color:" << std::endl << distortionColor << std::endl);
+      OUT_INFO("Camera Matrix Ir:" << std::endl << cameraMatrixIr);
+      OUT_INFO("Distortion Coeeficients Ir:" << std::endl << distortionIr << std::endl);
+
+      OUT_INFO("Pairing and Filtering charuco points...");
+      std::vector<std::vector<cv::Point3f> > pB;
+      std::vector<std::vector<cv::Point2f> > pC;
+      std::vector<std::vector<cv::Point2f> > pI;
+      // std::vector<std::vector<int> > iC;
+      // std::vector<std::vector<int> > iI;
+      pB.resize(pointsBoard.size());
+      pC.resize(pointsColor.size());
+      pI.resize(pointsIr.size());
+
+
+      // for (size_t fIdx=0; fIdx <  idsColor.size(); fIdx++){
+      //   OUT_INFO("####" << fIdx << " " << imagesColor[fIdx] << "####");
+      //   for (size_t mIdx=0; mIdx < idsColor[fIdx].size(); mIdx++ ){
+      //     OUT_INFO(mIdx << ": corners[" << idsColor[fIdx][mIdx] <<"] " << pointsColor[fIdx][mIdx*4+0] <<", "<< pointsColor[fIdx][mIdx*4+1] <<", "<< pointsColor[fIdx][mIdx*4+2] <<", "<< pointsColor[fIdx][mIdx*4+3] );
+      //   }
+      //   OUT_INFO("#############" << std::endl);
+      // }
+
+
+      //#pragma omp parallel for
+      for (size_t fileIdx =0; fileIdx < pointsBoard.size(); fileIdx++){
+        OUT_INFO(std::endl << std::endl << "fileIdx" << std::endl << fileIdx << std::endl);
+
+
+        std::vector< std::vector< cv::Point2f > > allCornersColor;
+        for(unsigned int marker_idx = 0; marker_idx < idsColor[fileIdx].size(); marker_idx++) {
+
+            std::vector<cv::Point2f> tmp_corners;
+            tmp_corners.push_back(pointsColor[fileIdx][marker_idx*4+0]);
+            tmp_corners.push_back(pointsColor[fileIdx][marker_idx*4+1]);
+            tmp_corners.push_back(pointsColor[fileIdx][marker_idx*4+2]);
+            tmp_corners.push_back(pointsColor[fileIdx][marker_idx*4+3]);
+            allCornersColor.push_back(tmp_corners);
+            OUT_INFO(marker_idx << ": corners["<< idsColor[fileIdx][marker_idx] <<"] " << tmp_corners[0] <<", "<< tmp_corners[1] <<", "<< tmp_corners[2] <<", "<< tmp_corners[3] );
+        }
+
+        OUT_INFO("imagesColor[fileIdx]:" << std::endl << imagesColor[fileIdx] << std::endl);
+
+        cv::Mat imgColor = cv::imread(imagesColor[fileIdx]);
+        cv::Mat chess_corners_color, chess_ids_color;
+        cv::aruco::interpolateCornersCharuco(allCornersColor, idsColor[fileIdx], imgColor, this->charuco_board,
+                                         chess_corners_color, chess_ids_color, cameraMatrixColor,
+                                         distortionColor);
+       // cv::aruco::interpolateCornersCharuco(allCornersColor, idsColor[fileIdx], imgColor, this->charuco_board,
+       //                                  chess_corners_color, chess_ids_color);
+        OUT_INFO("chess_corners_color:" << std::endl << chess_corners_color << std::endl);
+        OUT_INFO("chess_ids_color:" << std::endl << chess_ids_color << std::endl);
+
+
+        std::vector< std::vector< cv::Point2f > > allCornersIr;
+        for(unsigned int marker_idx = 0; marker_idx < idsIr[fileIdx].size(); marker_idx++) {
+
+            std::vector<cv::Point2f> tmp_corners;
+            tmp_corners.push_back(pointsIr[fileIdx][marker_idx*4+0]);
+            tmp_corners.push_back(pointsIr[fileIdx][marker_idx*4+1]);
+            tmp_corners.push_back(pointsIr[fileIdx][marker_idx*4+2]);
+            tmp_corners.push_back(pointsIr[fileIdx][marker_idx*4+3]);
+            allCornersIr.push_back(tmp_corners);
+            OUT_INFO(marker_idx << ": corners["<< idsIr[fileIdx][marker_idx] <<"] " << tmp_corners[0] <<", "<< tmp_corners[1] <<", "<< tmp_corners[2] <<", "<< tmp_corners[3] );
+        }
+
+        OUT_INFO("imagesIr[fileIdx]:" << std::endl << imagesIr[fileIdx] << std::endl);
+        cv::Mat imgIr = cv::imread(imagesIr[fileIdx]);
+        cv::Mat chess_corners_ir, chess_ids_ir;
+        cv::aruco::interpolateCornersCharuco(allCornersIr, idsIr[fileIdx], imgIr, this->charuco_board,
+                                         chess_corners_ir, chess_ids_ir, cameraMatrixIr,
+                                         distortionIr);
+       // cv::aruco::interpolateCornersCharuco(allCornersIr, idsIr[fileIdx], imgIr, this->charuco_board,
+       //                                  chess_corners_ir, chess_ids_ir);
+
+        OUT_INFO("chess_corners_ir:" << std::endl << chess_corners_ir << std::endl);
+        OUT_INFO("chess_ids_ir:" << std::endl << chess_ids_ir << std::endl);
+
+
+        int cIdx = 0;
+        int iIdx = 0;
+
+        while (cIdx < chess_ids_color.rows && iIdx < chess_ids_ir.rows ){
+          if(chess_ids_color.at<int>(cIdx,0) < chess_ids_ir.at<int>(iIdx,0)){
+            cIdx++;
+            continue;
+          }
+
+          if(chess_ids_color.at<int>(cIdx,0) > chess_ids_ir.at<int>(iIdx,0)){
+            iIdx++;
+            continue;
+          }
+          OUT_INFO("\tCOMMON ID: " << chess_ids_color.at<int>(cIdx,0) << "|" << this->charuco_board->chessboardCorners[chess_ids_color.at<int>(cIdx,0)] << " | " << cv::Point2f(chess_corners_color.at<float>(cIdx,0),chess_corners_color.at<float>(cIdx,1)) <<  " | " << cv::Point2f(chess_corners_ir.at<float>(iIdx,0),chess_corners_ir.at<float>(iIdx,1)) );
+
+          pB[fileIdx].push_back(this->charuco_board->chessboardCorners[chess_ids_color.at<int>(cIdx,0)]);
+          pC[fileIdx].push_back(cv::Point2f(chess_corners_color.at<float>(cIdx,0),chess_corners_color.at<float>(cIdx,1)));
+          pI[fileIdx].push_back(cv::Point2f(chess_corners_ir.at<float>(iIdx,0),chess_corners_ir.at<float>(iIdx,1)));
+
+          cIdx++;
+          iIdx++;
+        }
+
+
+
+      }
+
+      int num_points = 0;
+      for (int fileIdx = pointsBoard.size()-1; fileIdx >= 0; fileIdx--){
+
+        OUT_INFO("pB[fileIdx].size:" << pB[fileIdx].size() << std::endl);
+        if (pB[fileIdx].size() >= 3){
+          num_points += pB[fileIdx].size();
+          continue;
+        }
+        OUT_INFO("Not enough points! Deleting Frame!");
+        pB.erase(pB.begin()+fileIdx);
+        pC.erase(pC.begin()+fileIdx);
+        pI.erase(pI.begin()+fileIdx);
+      }
+
+
+
+      OUT_INFO("calibrating Color and Ir extrinsics... "<< pB.size() << " frames " << num_points << " and points");
+  #if CV_VERSION_MAJOR == 2
+      error = cv::stereoCalibrate(pB, pI, pC, cameraMatrixIr, distortionIr, cameraMatrixColor, distortionColor, sizeColor,
+                                  rotation, translation, essential, fundamental, termCriteria, cv::CALIB_FIX_INTRINSIC);
+  #elif CV_VERSION_MAJOR > 2
+      error = cv::stereoCalibrate(pB, pI, pC, cameraMatrixIr, distortionIr, cameraMatrixColor, distortionColor, sizeColor,
+                                  rotation, translation, essential, fundamental, cv::CALIB_FIX_INTRINSIC, termCriteria);
+  #endif
+      OUT_INFO("re-projection error: " << error << std::endl);
+
+      OUT_INFO("Rotation:" << std::endl << rotation);
+      OUT_INFO("Translation:" << std::endl << translation);
+      OUT_INFO("Essential:" << std::endl << essential);
+      OUT_INFO("Fundamental:" << std::endl << fundamental << std::endl);
+    }
 
   void storeCalibration()
   {
@@ -1261,9 +1442,16 @@ class DepthCalibration
 private:
   const std::string path;
 
+
+  const Board board_type;
   std::vector<cv::Point3f> board;
+
+  cv::Ptr<cv::aruco::Dictionary> aruco_dictionary;
+  cv::Ptr<cv::aruco::CharucoBoard> charuco_board;
   std::vector<std::vector<cv::Point2f> > points;
+  std::vector<std::vector<int> > ids;
   std::vector<std::string> images;
+  std::vector<std::string> imagesIr;
 
   cv::Size size;
 
@@ -1275,8 +1463,8 @@ private:
   std::ofstream plot;
 
 public:
-  DepthCalibration(const std::string &path, const Board board_type, const cv::Size &boardDims, const float boardSize)
-      : path(path), size(512, 424)
+  DepthCalibration(const std::string &path, const Board board_type, const cv::Size &boardDims, const float boardSize, const int aruco_dict_id)
+      :path(path),  board_type(board_type), size(512, 424)
   {
     board.resize(boardDims.width * boardDims.height);
     if (board_type == ACIRCLE)
@@ -1299,6 +1487,13 @@ public:
         }
       }
     }
+
+    if (board_type == CHARUCO){
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // create charuco board object
+      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+    }
+
   }
 
   ~DepthCalibration()
@@ -1328,11 +1523,6 @@ public:
         continue;
       }
 
-      /*pos = filename.rfind(CALIB_SYNC);
-      if(pos != std::string::npos)
-      {
-        continue;
-      }*/
 
       pos = filename.rfind(CALIB_FILE_IR_GREY);
       if(pos != std::string::npos)
@@ -1366,7 +1556,7 @@ public:
     return ret;
   }
 
-  void calibrate()
+  void calibrate_depth()
   {
     plot.open(path + "plot.dat", std::ios_base::trunc);
     if(!plot.is_open())
@@ -1407,12 +1597,97 @@ public:
       cv::remap(depth, depth, mapX, mapY, cv::INTER_NEAREST);
       computeROI(depth, points[i], region, roi);
 
-      getPlane(i, planeNormal, planeDistance);
+      getPlane(board, points[i], planeNormal, planeDistance);
 
       computePointDists(planeNormal, planeDistance, region, roi, depthDists, imageDists);
     }
     compareDists(imageDists, depthDists);
   }
+
+
+    void calibrate_depth_charuco()
+    {
+      plot.open(path + "plot.dat", std::ios_base::trunc);
+      if(!plot.is_open())
+      {
+        OUT_ERROR("couldn't open 'plot.dat'!");
+        return;
+      }
+      if(images.empty())
+      {
+        OUT_ERROR("no images found!");
+        return;
+      }
+
+      plot << "# Columns:" << std::endl
+           << "# 1: X" << std::endl
+           << "# 2: Y" << std::endl
+           << "# 3: computed depth" << std::endl
+           << "# 4: measured depth" << std::endl
+           << "# 5: difference between computed and measured depth" << std::endl;
+
+      std::vector<double> depthDists, imageDists;
+      for(size_t i = 0; i < images.size(); ++i)
+      {
+
+        OUT_INFO("frame: " << images[i]);
+        plot << "# frame: " << images[i] << std::endl;
+
+        cv::Mat depth, planeNormal, region;
+        double planeDistance;
+        cv::Rect roi;
+
+
+        depth = cv::imread(images[i], cv::IMREAD_ANYDEPTH);
+        if(depth.empty())
+        {
+          OUT_ERROR("couldn't load image '" << images[i] << "'!");
+          return;
+        }
+
+        std::vector< std::vector< cv::Point2f > > allCorners;
+        for(unsigned int marker_idx = 0; marker_idx < ids[i].size(); marker_idx++) {
+
+            std::vector<cv::Point2f> tmp_corners;
+            tmp_corners.push_back(points[i][marker_idx*4+0]);
+            tmp_corners.push_back(points[i][marker_idx*4+1]);
+            tmp_corners.push_back(points[i][marker_idx*4+2]);
+            tmp_corners.push_back(points[i][marker_idx*4+3]);
+            allCorners.push_back(tmp_corners);
+            OUT_INFO(marker_idx << ": corners["<< ids[i][marker_idx] <<"] " << tmp_corners[0] <<", "<< tmp_corners[1] <<", "<< tmp_corners[2] <<", "<< tmp_corners[3] );
+        }
+
+        OUT_INFO("images[i]:" << std::endl << images[i] << std::endl);
+        cv::Mat img = cv::imread(imagesIr[i]);
+        cv::Mat chess_corners, chess_ids;
+        cv::aruco::interpolateCornersCharuco(allCorners, ids[i], img, this->charuco_board,
+                                         chess_corners, chess_ids, cameraMatrix,
+                                         distortion);
+
+        std::vector< cv::Point3f > board_points;
+        for (size_t iIdx = 0; iIdx < ids[i].size(); iIdx++){
+          board_points.push_back(this->charuco_board->chessboardCorners[chess_ids.at<int>(iIdx,0)]);
+        }
+
+
+        cv::remap(depth, depth, mapX, mapY, cv::INTER_NEAREST);
+        // computeROI(depth, points[i], region, roi);
+        computeROI(depth, chess_corners, region, roi);
+
+        getPlane(board_points, chess_corners, planeNormal, planeDistance);
+
+        computePointDists(planeNormal, planeDistance, region, roi, depthDists, imageDists);
+      }
+      compareDists(imageDists, depthDists);
+    }
+
+    void calibrate(){
+      if (board_type == CHARUCO){
+        calibrate_depth_charuco();
+      }else{
+        calibrate_depth();
+      }
+    }
 
 private:
   void compareDists(const std::vector<double> &imageDists, const std::vector<double> &depthDists) const
@@ -1503,14 +1778,14 @@ private:
     return point.at<double>(2);
   }
 
-  void getPlane(const size_t index, cv::Mat &normal, double &distance) const
+  void getPlane(const std::vector<cv::Point3f> &board, const std::vector<cv::Point2f> &points, cv::Mat &normal, double &distance) const
   {
     cv::Mat rvec, rotation, translation;
-    //cv::solvePnP(board, points[index], cameraMatrix, distortion, rvec, translation, false, cv::EPNP);
+    //cv::solvePnP(board, points, cameraMatrix, distortion, rvec, translation, false, cv::EPNP);
 #if CV_VERSION_MAJOR == 2
-    cv::solvePnPRansac(board, points[index], cameraMatrix, distortion, rvec, translation, false, 300, 0.05, board.size(), cv::noArray(), cv::ITERATIVE);
+    cv::solvePnPRansac(board, points, cameraMatrix, distortion, rvec, translation, false, 300, 0.05, board.size(), cv::noArray(), cv::ITERATIVE);
 #elif CV_VERSION_MAJOR > 2
-    cv::solvePnPRansac(board, points[index], cameraMatrix, distortion, rvec, translation, false, 300, 0.05, 0.99, cv::noArray(), cv::SOLVEPNP_ITERATIVE);
+    cv::solvePnPRansac(board, points, cameraMatrix, distortion, rvec, translation, false, 300, 0.05, 0.99, cv::noArray(), cv::SOLVEPNP_ITERATIVE);
 #endif
     cv::Rodrigues(rvec, rotation);
 
@@ -1556,7 +1831,9 @@ private:
   bool readFiles(const std::vector<std::string> &files)
   {
     points.resize(files.size());
+    ids.resize(files.size());
     images.resize(files.size());
+    imagesIr.resize(files.size());
     bool ret = true;
 
     #pragma omp parallel for
@@ -1579,8 +1856,10 @@ private:
       else
       {
         file["points"] >> points[i];
+        file["ids"] >> ids[i];
         file.release();
         images[i] = path + files[i] + CALIB_FILE_DEPTH;
+        imagesIr[i] = path + files[i] + CALIB_FILE_IR;
       }
     }
     return ret;
@@ -1819,7 +2098,7 @@ int main(int argc, char **argv)
   }
   else if(calibDepth)
   {
-    DepthCalibration calib(path, board_type, boardDims, boardSize);
+    DepthCalibration calib(path, board_type, boardDims, boardSize, aruco_dict_id);
 
     OUT_INFO("restoring files...");
     calib.restore();

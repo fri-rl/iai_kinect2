@@ -9,9 +9,12 @@ set(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -Warray-bounds -Wtype-limits -Wreturn-ty
 
 # Check for c++11 support
 INCLUDE(CheckCXXCompilerFlag)
+CHECK_CXX_COMPILER_FLAG("-std=c++14" COMPILER_SUPPORTS_CXX14)
 CHECK_CXX_COMPILER_FLAG("-std=c++11" COMPILER_SUPPORTS_CXX11)
 CHECK_CXX_COMPILER_FLAG("-std=c++0x" COMPILER_SUPPORTS_CXX0X)
-IF(COMPILER_SUPPORTS_CXX11)
+IF(COMPILER_SUPPORTS_CXX14)
+SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++14")
+ELSEIF(COMPILER_SUPPORTS_CXX11)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++11")
 ELSEIF(COMPILER_SUPPORTS_CXX0X)
 SET(CMAKE_CXX_FLAGS "${CMAKE_CXX_FLAGS} -std=c++0x")
@@ -19,7 +22,7 @@ ELSE()
   MESSAGE(ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 ENDIF()
 
-find_package(catkin REQUIRED COMPONENTS roscpp rostime std_msgs sensor_msgs message_filters cv_bridge image_transport compressed_image_transport compressed_depth_image_transport kinect2_bridge)
+find_package(catkin REQUIRED COMPONENTS roscpp rostime std_msgs sensor_msgs message_filters tf2 tf2_msgs tf2_ros tf2_geometry_msgs cv_bridge image_transport compressed_image_transport compressed_depth_image_transport kinect2_bridge)
 
 ## System dependencies are found with CMake's conventions
 find_package(OpenCV REQUIRED)
@@ -67,8 +70,22 @@ include_directories(include
   ${kinect2_bridge_INCLUDE_DIR}
 )
 
+#pragma message("INCLUDEDIRS" ${OpenCV_INCLUDE_DIRS})
+
 add_executable(kinect2_calibration src/kinect2_calibration.cpp)
 target_link_libraries(kinect2_calibration
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+
+add_executable(camera_ext_record src/camera_ext_record.cpp)
+target_link_libraries(camera_ext_record
+  ${catkin_LIBRARIES}
+  ${OpenCV_LIBRARIES}
+)
+
+add_executable(camera_ext_calibration src/camera_ext_calibration.cpp)
+target_link_libraries(camera_ext_calibration
   ${catkin_LIBRARIES}
   ${OpenCV_LIBRARIES}
 )

@@ -1404,7 +1404,8 @@ private:
     case MONO_HD_RECT:
     case MONO_QHD:
     case MONO_QHD_RECT:
-      msgImage.encoding = sensor_msgs::image_encodings::TYPE_8UC1;
+      // msgImage.encoding = sensor_msgs::image_encodings::TYPE_8UC1;
+      msgImage.encoding = sensor_msgs::image_encodings::MONO8;
       break;
     case COUNT:
       return;
@@ -1446,7 +1447,8 @@ private:
     case MONO_HD_RECT:
     case MONO_QHD:
     case MONO_QHD_RECT:
-      msgImage.format = sensor_msgs::image_encodings::TYPE_8UC1 + "; jpeg compressed ";
+      // msgImage.format = sensor_msgs::image_encodings::TYPE_8UC1 + "; jpeg compressed ";
+      msgImage.format = sensor_msgs::image_encodings::MONO8 + "; jpeg compressed ";
       cv::imencode(".jpg", image, msgImage.data, compressionParams);
       break;
     case COUNT:

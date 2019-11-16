@@ -1,0 +1,41 @@
+<launch>
+
+  <arg name="camA_image"/>
+  <arg name="camB_image"/>
+  <arg name="camA_tf_frame"/>
+  <arg name="camB_tf_frame"/>
+  <arg name="referenceA_tf_frame"/>
+  <arg name="referenceB_tf_frame"/>
+  <arg name="boardA_tf_frame" default="boardA"/>
+  <arg name="boardB_tf_frame" default="boardB"/>
+  <arg name="camA_info"/>
+  <arg name="camB_info"/>
+  <arg name="board" default="charuco"/>
+  <arg name="charuco_dict" default="6x6_50"/>
+  <arg name="charuco_rows" default="3"/>
+  <arg name="charuco_cols" default="4"/>
+  <arg name="charuco_aruco_size" default="0.05"/>
+  <arg name="charuco_chess_size" default="0.065"/>
+  <arg name="path" default="$(env PWD)"/>
+
+  <remap from="camA_image" to="$(arg camA_image)" />
+  <remap from="camB_image" to="$(arg camB_image)" />
+  <remap from="camA_info" to="$(arg camA_info)" />
+  <remap from="camB_info" to="$(arg camB_info)" />
+  <node pkg="kinect2_calibration" type="camera_ext_record" name="ext_recording" required="true" output="screen" args="-path $(arg path)" cwd="node">
+
+        <rosparam param="dict" ns="charuco" subst_value="true">$(arg charuco_dict)</rosparam>
+        <rosparam param="rows" ns="charuco" subst_value="true">$(arg charuco_rows)</rosparam>
+        <rosparam param="cols" ns="charuco" subst_value="true">$(arg charuco_cols)</rosparam>
+        <rosparam param="aruco_size" ns="charuco" subst_value="true">$(arg charuco_aruco_size)</rosparam>
+        <rosparam param="chess_size" ns="charuco" subst_value="true">$(arg charuco_chess_size)</rosparam>
+        <rosparam param="referenceA_tf_frame" subst_value="true">$(arg referenceA_tf_frame)</rosparam>
+        <rosparam param="referenceB_tf_frame" subst_value="true">$(arg referenceB_tf_frame)</rosparam>
+        <rosparam param="camA_tf_frame" subst_value="true">$(arg camA_tf_frame)</rosparam>
+        <rosparam param="camB_tf_frame" subst_value="true">$(arg camB_tf_frame)</rosparam>
+        <rosparam param="boardA_tf_frame" subst_value="true">$(arg boardA_tf_frame)</rosparam>
+        <rosparam param="boardB_tf_frame" subst_value="true">$(arg boardB_tf_frame)</rosparam>
+
+  </node>
+
+</launch>

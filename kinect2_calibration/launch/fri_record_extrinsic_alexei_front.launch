@@ -1,0 +1,17 @@
+<launch>
+
+  <include file="$(find kinect2_calibration)/launch/record_extrinsic.launch" >
+    <arg name="camA_image" value="/camera/alexei_head/image_color"/>
+    <!-- <arg name="camA_image" value="/camera/left/hd/image_color"/> -->
+    <arg name="camB_image" value="/camera/front/hd/image_mono"/>
+    <arg name="camA_info" value="/camera/alexei_head/camera_info"/>
+    <!-- <arg name="camA_info" value="/camera/left/hd/camera_info"/> -->
+    <arg name="camB_info" value="/camera/front/hd/camera_info"/>
+
+    <arg name="camA_tf_frame" value="alexei/head_camera"/>
+    <arg name="camB_tf_frame" value="front_rgb_optical_frame"/>
+    <arg name="referenceA_tf_frame" value="alexei/base"/>
+    <arg name="referenceB_tf_frame" value="front_link"/>
+
+  </include>
+</launch>
