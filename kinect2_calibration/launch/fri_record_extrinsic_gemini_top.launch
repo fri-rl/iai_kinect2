@@ -1,0 +1,24 @@
+<launch>
+
+  <include file="$(find kinect2_calibration)/launch/record_extrinsic.launch" >
+    <arg name="camA_image" value="/kinect/hd/image_color"/>
+    <!-- <arg name="camA_image" value="/camera/left/hd/image_color"/> -->
+    <arg name="camB_image" value="/top_down/hd/image_color"/>
+    <arg name="camA_info" value="/kinect/hd/camera_info"/>
+    <!-- <arg name="camA_info" value="/camera/left/hd/camera_info"/> -->
+    <arg name="camB_info" value="/top_down/hd/camera_info"/>
+
+    <arg name="camA_tf_frame" value="kinect_rgb_optical_frame"/>
+    <arg name="camB_tf_frame" value="top_down_rgb_optical_frame"/>
+    <arg name="referenceA_tf_frame" value="base_link"/>
+    <arg name="referenceB_tf_frame" value="top_down_link"/>
+
+    <arg name="board" default="charuco"/>
+    <arg name="charuco_dict" default="6x6_250"/>
+    <arg name="charuco_rows" default="5"/>
+    <arg name="charuco_cols" default="6"/>
+    <arg name="charuco_aruco_size" default="0.10"/>
+    <arg name="charuco_chess_size" default="0.14"/>
+
+  </include>
+</launch>

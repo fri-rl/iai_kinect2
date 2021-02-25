@@ -170,9 +170,13 @@ public:
 
 
     if (board_type == CHARUCO){
-      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
-      // create charuco board object
-      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      // aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // // create charuco board object
+      // charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(cv::aruco::DICT_6X6_250));
+      charuco_board = cv::aruco::CharucoBoard::create(5, 6, 0.14, 0.10, aruco_dictionary);
+
       aruco_board = charuco_board.staticCast<cv::aruco::Board>();
     }
 
@@ -320,6 +324,13 @@ private:
   {
 
     cv::Ptr<cv::aruco::DetectorParameters> detectorParams = cv::aruco::DetectorParameters::create();
+
+    detectorParams->markerBorderBits =1; 
+    detectorParams->minOtsuStdDev = 0.5;
+
+    detectorParams->maxErroneousBitsInBorderRate = 0.6;
+    detectorParams->errorCorrectionRate = 0.9;
+
     bool refindStrategy = true;
 
     std::vector<cv::Point2f> pointsColor, pointsIr;
@@ -789,9 +800,13 @@ public:
     }
 
     if (board_type == CHARUCO){
-      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(cv::aruco::DICT_6X6_250));
+      
       // create charuco board object
-      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      // charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      charuco_board = cv::aruco::CharucoBoard::create(5, 6, 0.14, 0.10, aruco_dictionary);
+      
       aruco_board = charuco_board.staticCast<cv::aruco::Board>();
     }
 
@@ -1489,9 +1504,12 @@ public:
     }
 
     if (board_type == CHARUCO){
-      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
-      // create charuco board object
-      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      // aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      // // create charuco board object
+      // charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(cv::aruco::DICT_6X6_250));
+      charuco_board = cv::aruco::CharucoBoard::create(5, 6, 0.14, 0.10, aruco_dictionary);
     }
 
   }
@@ -1665,8 +1683,10 @@ public:
                                          distortion);
 
         std::vector< cv::Point3f > board_points;
-        for (size_t iIdx = 0; iIdx < ids[i].size(); iIdx++){
+        std::vector< cv::Point3f > observed_chess_corners;
+        for (int iIdx = 0; iIdx < chess_ids.size().height; iIdx++){
           board_points.push_back(this->charuco_board->chessboardCorners[chess_ids.at<int>(iIdx,0)]);
+          // observed_chess_corners.push_back(chess_corners.row(iIdx));
         }
 
 
@@ -1780,6 +1800,8 @@ private:
 
   void getPlane(const std::vector<cv::Point3f> &board, const std::vector<cv::Point2f> &points, cv::Mat &normal, double &distance) const
   {
+
+    std::cout << "Board size: " << board.size() << "\n Point size: " << points.size() << std::endl;
     cv::Mat rvec, rotation, translation;
     //cv::solvePnP(board, points, cameraMatrix, distortion, rvec, translation, false, cv::EPNP);
 #if CV_VERSION_MAJOR == 2

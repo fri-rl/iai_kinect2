@@ -281,7 +281,7 @@ private:
 
     // detectorParams->aprilTagQuadSigma = 0.8;
     // detectorParams->detectInvertedMarker = true;
-    detectorParams->markerBorderBits =2;
+    detectorParams->markerBorderBits =1; 
     detectorParams->minOtsuStdDev = 0.5;
 
     detectorParams->maxErroneousBitsInBorderRate = 0.6;
@@ -708,6 +708,7 @@ int main(int argc, char **argv)
   std::map<std::string, cv::aruco::PREDEFINED_DICTIONARY_NAME> aruco_ids;
   aruco_ids["4x4_50"] = cv::aruco::DICT_4X4_50;
   aruco_ids["6x6_50"] = cv::aruco::DICT_6X6_50;
+  aruco_ids["6x6_250"] = cv::aruco::DICT_6X6_250;
 
   ros::init(argc, argv, "camera_ext_record", ros::init_options::AnonymousName);
   ros::NodeHandle nh("~");
@@ -823,6 +824,7 @@ int main(int argc, char **argv)
     nh.param<int>("charuco/cols", charuco_cols, 4);
     nh.param<double>("charuco/aruco_size", charuco_aruco_size, 0.05);
     nh.param<double>("charuco/chess_size", charuco_chess_size, 0.065);
+
 
     ROS_INFO_STREAM("charuco/dict " << aruco_desc << " " << aruco_ids.at(aruco_desc) << " ");
     ROS_INFO_STREAM("charuco/rows " << charuco_rows);

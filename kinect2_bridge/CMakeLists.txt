@@ -19,7 +19,9 @@ ELSE()
   MESSAGE(ERROR "The compiler ${CMAKE_CXX_COMPILER} has no C++11 support. Please use a different C++ compiler.")
 ENDIF()
 
-find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
+# find_package(freenect2 REQUIRED HINTS "$ENV{HOME}/freenect2")
+find_package(freenect2 REQUIRED)
+
 
 find_package(catkin REQUIRED COMPONENTS roscpp rostime tf std_msgs sensor_msgs nodelet cv_bridge compressed_depth_image_transport kinect2_registration)
 
@@ -51,7 +53,7 @@ catkin_package(
 ###########
 
 # Display additional files in qtcreator
-execute_process(COMMAND find ${PROJECT_SOURCE_DIR} -type f OUTPUT_VARIABLE FILES_STRING)
+execute_process(COMMAND find ${PROJECT_SOURCE_DIR}/src -type f OUTPUT_VARIABLE FILES_STRING)
 string(REPLACE "\n" ";" FILES_LIST ${FILES_STRING})
 add_custom_target(additional_files_${PROJECT_NAME}
   SOURCES

@@ -172,9 +172,10 @@ public:
     // }
 
     if (board_type == CHARUCO){
-      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(aruco_dict_id));
+      aruco_dictionary = cv::aruco::getPredefinedDictionary(cv::aruco::PREDEFINED_DICTIONARY_NAME(cv::aruco::DICT_6X6_250));
       // create charuco board object
-      charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      // charuco_board = cv::aruco::CharucoBoard::create(boardDims.width, boardDims.height, boardSize, 0.05, aruco_dictionary);
+      charuco_board = cv::aruco::CharucoBoard::create(5, 6, 0.14, 0.10, aruco_dictionary);
       aruco_board = charuco_board.staticCast<cv::aruco::Board>();
     }
 
